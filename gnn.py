@@ -15,6 +15,9 @@ class GraphNetwork(nn.Module):
             mp_steps,
             proc_hidden,
             encoder_hidden_dim, decoder_hidden_dim,
+            dim,
+            max_node,
+            max_edge,
             ve_dim=16, ee_dim=16, relative_encoder=True):
 
         super(GraphNetwork, self).__init__()
@@ -31,17 +34,22 @@ class GraphNetwork(nn.Module):
 
         # phi_e/phi_v, process edges and nodes into intermediate latent states
         self._edge_processor = self._construct_mlp(
-            edge_dim + 2 * node_dim + global_dim,
-            proc_hidden, edge_dim,
+            ee_dim + 2 * ve_dim + global_dim,
+            proc_hidden, ee_dim,
             batch_norm=True)
 
         self._node_processor = self._construct_mlp(
-            edge_dim + node_dim + global_dim,
+            ee_dim + ve_dim + global_dim,
             proc_hidden,
-            edge_dim,
+            ve_dim,
             batch_norm=True)
 
         self.relative_encoder = relative_encoder
+        self.dim = dim
+        self.ve_dim = ve_dim
+        self.ee_dim = ee_dim
+        self.max_node = max_node
+        self.max_edge = max_edge
 
     def _construct_mlp(self, input, hidden, output, batch_norm=False):
         layers = nn.ModuleList([nn.Linear(input, hidden)])
@@ -51,7 +59,6 @@ class GraphNetwork(nn.Module):
 
         for i in range(0, hidden):
             layers.append(nn.Linear(hidden, hidden))
-
             if batch_norm:
                 layers.append(nn.LayerNorm(hidden))
 
@@ -64,32 +71,33 @@ class GraphNetwork(nn.Module):
             out.append(F.pad(item, (0, 0, 0, length - item.size(0))))
         return out
 
-    def _encode(self, graph_batch, n_nodes, n_edges):
+    def _encode(self, graph_batch):
         for i in graph_batch:
             global_tensor = i.globals.repeat(i.n_nodes)
             global_tensor = global_tensor.unsqueeze(1)
             i.nodes = torch.cat([i.nodes, global_tensor], dim=1)
 
-        padded_nodes = self._pad_items([x.nodes for x in graph_batch], n_nodes)
-        padded_edges = self._pad_items([x.edges for x in graph_batch], n_edges)
+        padded_nodes = self._pad_items([x.nodes for x in graph_batch], self.max_node)
+        padded_edges = self._pad_items([x.edges for x in graph_batch], self.max_edge)
 
         batched_nodes = torch.stack(padded_nodes)
         batched_edges = torch.stack(padded_edges)
 
+        # this part is difficult to batch but it doesn't matter because it's fast
         if self.relative_encoder:
             batched_relative_edges = []
             for i, graph in enumerate(graph_batch):
                 # mask positions to force the network to learn
                 # positional invariance
                 senders = torch.index_select(batched_nodes[i], 0, graph.senders)
-                senders = torch.narrow(senders, 1, 0, 3)
+                senders = torch.narrow(senders, 1, 0, self.dim)
                 receivers = torch.index_select(batched_nodes[i], 0, graph.receivers)
-                receivers = torch.narrow(receivers, 1, 0, 3)
+                receivers = torch.narrow(receivers, 1, 0, self.dim)
 
                 positional = senders - receivers
                 norm = torch.norm(positional, dim=1).unsqueeze(1)
                 relative_edges = torch.cat([positional, norm], dim=1)
-                relative_edges = self._pad_items([relative_edges], n_edges)
+                relative_edges = self._pad_items([relative_edges], self.max_edge)
                 relative_edges = relative_edges[0]
 
                 batched_relative_edges.append(torch.cat([batched_edges[i], relative_edges], dim=1))
@@ -97,6 +105,7 @@ class GraphNetwork(nn.Module):
 
         latent_nodes = batched_nodes
 
+        # batched
         for _, l in enumerate(self._node_encoder):
             latent_nodes = l(latent_nodes)
 
@@ -105,9 +114,46 @@ class GraphNetwork(nn.Module):
         for _, l in enumerate(self._edge_encoder):
             latent_edges = l(latent_edges)
 
-        return latent_nodes, latent_edges
+        for i, graph in enumerate(graph_batch):
+            graph.nodes = latent_nodes[i]
+            graph.node_dim = self.ve_dim
+            graph.edges = latent_edges[i]
+            graph.edge_dim = self.ee_dim
 
-    # def _process(self, batched_latent_graph):
+        return graph_batch
 
-    # def forward(self, graph_batch):
+    def _phi_e(self, graph_batch):
+        # update edge embeddings based on previous embeddings, related nodes, and globals
+
+        # construct tensor of [e_k, v_r_k, v_s_k, u] for each edge for each graph in batch
+        batched_tensor_tuple = []
+        for i, graph in enumerate(graph_batch):
+            ee = graph.edges
+            ve = graph.nodes
+            senders = torch.index_select(ve, 0, graph.senders)
+            senders = self._pad_items([senders], self.max_edge)[0]
+            receivers = torch.index_select(ve, 0, graph.receivers)
+            receivers = self._pad_items([receivers], self.max_edge)[0]
+
+            global_tensor = graph.globals.repeat(graph.n_edges)
+            global_tensor = global_tensor.unsqueeze(1)
+            global_tensor = self._pad_items([global_tensor], self.max_edge)[0]
+
+            batched_tensor_tuple.append(torch.cat([ee, senders, receivers, global_tensor], dim=1))
+
+        batched_tensor_tuple = torch.stack(batched_tensor_tuple)
+
+        next_latent_state = batched_tensor_tuple
+        for _, l in enumerate(self._edge_processor):
+            next_latent_state = l(next_latent_state)
+
+        for i, graph in enumerate(graph_batch):
+            graph.edges = next_latent_state[i]
+
+        return graph_batch
+
+    # def _phi_v(self, latent_nodes, aggregator):
+    # def _process(self, latent_graph_tuple):
+
+    # def forward(self, graph_batch, batch_node_max, batch_edge_max):
         # take in a list of graphs, batch them, return new graphs
