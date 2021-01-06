@@ -1,6 +1,7 @@
+import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import torch
+from torch_scatter import scatter
 
 
 class GraphNetwork(nn.Module):
@@ -9,15 +10,15 @@ class GraphNetwork(nn.Module):
     def __init__(
             self,
             # r_conn,
-            node_dim,
-            edge_dim,
-            global_dim,
-            mp_steps,
-            proc_hidden,
-            encoder_hidden_dim, decoder_hidden_dim,
-            dim,
-            max_node,
-            max_edge,
+            node_dim=6,
+            edge_dim=1,
+            global_dim=1,
+            mp_steps=16,
+            proc_hidden=256,
+            encoder_hidden_dim=128, decoder_hidden_dim=128,
+            dim=3,
+            max_node=10,
+            max_edge=10,
             ve_dim=16, ee_dim=16, relative_encoder=True):
 
         super(GraphNetwork, self).__init__()
@@ -25,9 +26,9 @@ class GraphNetwork(nn.Module):
         self._node_encoder = self._construct_mlp(
             node_dim + global_dim, encoder_hidden_dim, ve_dim)
 
-        # relative encoder adds 3 coords and norm to each edge
+        # relative encoder adds [dim] coords and norm to each edge
         if relative_encoder:
-            edge_dim += 4
+            edge_dim += dim + 1
 
         self._edge_encoder = self._construct_mlp(
             edge_dim, encoder_hidden_dim, ee_dim)
@@ -43,6 +44,14 @@ class GraphNetwork(nn.Module):
             proc_hidden,
             ve_dim,
             batch_norm=True)
+
+        # as written in the paper, the decoder goes from the latent node dimension to
+        # dimensional acceleration to be used in an euler integrator
+        self._decoder = self._construct_mlp(
+            ve_dim,
+            decoder_hidden,
+            dim
+        )
 
         self.relative_encoder = relative_encoder
         self.dim = dim
@@ -127,7 +136,7 @@ class GraphNetwork(nn.Module):
 
         # construct tensor of [e_k, v_r_k, v_s_k, u] for each edge for each graph in batch
         batched_tensor_tuple = []
-        for i, graph in enumerate(graph_batch):
+        for graph in graph_batch:
             ee = graph.edges
             ve = graph.nodes
             senders = torch.index_select(ve, 0, graph.senders)
@@ -152,7 +161,11 @@ class GraphNetwork(nn.Module):
 
         return graph_batch
 
-    # def _phi_v(self, latent_nodes, aggregator):
+    def _phi_v(self, graph_batch):
+        for i, graph in enumerate(graph_batch):
+            scattered_edge_states = scatter(graph.edges, graph.receivers, dim=0)
+            print(scattered_edge_states)
+            return
     # def _process(self, latent_graph_tuple):
 
     # def forward(self, graph_batch, batch_node_max, batch_edge_max):

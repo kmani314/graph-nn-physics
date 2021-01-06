@@ -1,3 +1,7 @@
 numpy==1.19.5
-torch==1.7.1
+Pillow==8.1.0
+torch==1.7.1+cu110
+torch-scatter==2.0.5
+torchaudio==0.7.2
+torchvision==0.8.2+cu110
 typing-extensions==3.7.4.3
