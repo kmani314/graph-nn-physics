@@ -7,9 +7,13 @@ from os import listdir
 from os.path import join, splitext
 from functools import cmp_to_key
 import argparse
+import tfrecord
+
 
 parser = argparse.ArgumentParser()
 parser.add_argument('dir')
+parser.add_argument('--tfrecord', action='store_true')
+parser.add_argument('--index')
 args = parser.parse_args()
 
 
@@ -19,7 +23,8 @@ def compare(a, b):
     else:
         return -1
 
-def get_hd5_boxbath(path):
+
+def get_hd5(path):
     files = []
 
     for idx, i in enumerate(sorted(listdir(path), key=cmp_to_key(compare))):
@@ -30,7 +35,14 @@ def get_hd5_boxbath(path):
     for idx, i in enumerate(files):
         tstep_pos.append((i['positions']))
 
-    return np.array(tstep_pos)
+    return np.array([tstep_pos])
+
+
+def get_tfrecord(path, index):
+    loader = tfrecord.tfrecord_loader(path, index)
+    for i in loader:
+        print(i)
+
 
 def animation_func(num, data, points):
     points._offsets3d = (data[num][:, 0], data[num][:, 2], data[num][:, 1])
@@ -40,7 +52,10 @@ def animation_func(num, data, points):
 fig = plt.figure()
 ax = p3.Axes3D(fig)
 
-data = get_hd5_boxbath(args.dir)
+if args.tfrecord:
+    data = get_tfrecord(args.dir, args.index)
+else:
+    data = get_hd5(args.dir)
 
 points = ax.scatter(data[0][:, 0], data[0][:, 2], data[0][:, 1], s=1000, alpha=0.8)
 anim = animation.FuncAnimation(fig, animation_func, data.shape[0], fargs=(data, points), interval=1)

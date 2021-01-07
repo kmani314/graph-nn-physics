@@ -18,10 +18,10 @@ network = GraphNetwork(
 nodes = torch.tensor(
     [[1.5, 2, 4, 3, 6, 9], [1.5, 8, 9, 6, 9, 6], [1.5, 1, 2, 6, 9, 6], [1.5, 2, 4, 6, 9, 6]])
 
-edges = torch.tensor([[1], [1], [1], [1], [1.0]])
+edges = torch.tensor([[1], [1], [1], [1], [1.0], [1]])
 
-senders = torch.tensor([1, 2, 3])
-receivers = torch.tensor([2, 1, 0])
+senders = torch.tensor([1, 2, 3, 0, 2, 2])
+receivers = torch.tensor([2, 1, 0, 2, 1, 3])
 globals = torch.tensor([1])
 
 batch = [Graph(nodes, edges, senders, receivers, globals) for i in range(0, 5)]
