@@ -39,3 +39,8 @@ class SimulationDataset(Dataset):
 
         # if using a particle type embedding, move this elsewhere
         nodes = torch.cat([pos, vels, types], dim=1)
+
+        graph = Graph(nodes)
+        graph.gen_edges(self.file[self.group].attrs['default_connectivity_radius'])
+
+        return graph
