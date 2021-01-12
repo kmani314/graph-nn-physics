@@ -1,8 +1,6 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from memory_profiler import profile
-from torch_scatter import scatter
 
 
 class GraphNetwork(nn.Module):
@@ -63,6 +61,9 @@ class GraphNetwork(nn.Module):
             decoder_hidden,
             dim
         )
+
+        self._edge_processors = nn.ModuleList(self._edge_processors)
+        self._node_processors = nn.ModuleList(self._node_processors)
 
         self.mp_steps = mp_steps
         self.relative_encoder = relative_encoder
@@ -159,6 +160,7 @@ class GraphNetwork(nn.Module):
 
         batched_tensor_tuple = torch.stack(batched_tensor_tuple)
 
+        # print(batched_tensor_tuple.device)
         next_latent_state = processor(batched_tensor_tuple)
 
         for i, graph in enumerate(graph_batch):
@@ -174,12 +176,10 @@ class GraphNetwork(nn.Module):
             masked_edges = torch.narrow(graph.edges, 0, 0, graph.n_edges)
 
             # sum receivers for every node
-            scattered_edge_states = scatter(masked_edges, graph.receivers, dim=0)
-            # print(graph.receivers.shape)
-            # print(masked_edges.shape)
-            # scattered_edge_states = torch.zeros(
-            #     graph.receivers.shape
-            # ).scatter_add(0, graph.receivers.unsqueeze(1), masked_edges)
+
+            receivers = graph.receivers.unsqueeze(1).repeat(1, self.ve_dim)
+            zeros = torch.zeros_like(masked_edges)
+            scattered_edge_states = zeros.scatter_add(0, receivers, masked_edges)
 
             # this should only be necessary if there are isolated nodes with no receiver edges
             scattered_edge_states = self._pad_items([scattered_edge_states], batch_nm)[0]

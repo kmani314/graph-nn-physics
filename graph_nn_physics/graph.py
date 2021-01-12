@@ -1,5 +1,5 @@
 from scipy.spatial import KDTree
-# from memory_profiler import profile
+import numpy as np
 import torch
 
 class Graph():
@@ -15,30 +15,19 @@ class Graph():
         if edges is not None:
             self.n_edges = self.edges.size(0)
             self.edge_dim = self.edges.size(1)
-        else:
-            self.senders = torch.tensor([], dtype=torch.int64)
-            self.receivers = torch.tensor([], dtype=torch.int64)
-            self.edges = torch.tensor([], dtype=torch.double)
 
         self.globals = globals
         if self.globals is None:
             self.globals = torch.tensor([], dtype=torch.double)
 
-    # @profile
     def gen_edges(self, radius):
         self.radius = radius
         self.tree = KDTree(self.nodes)
-        self.edges = self.edges.unsqueeze(1)
 
-        for i, node in enumerate(self.nodes):
-            neighbors = self.tree.query_ball_point(node, radius)
+        edges = self.tree.query_pairs(radius, output_type='ndarray')
+        edges = np.concatenate((edges, np.flip(edges, 1)))
 
-            senders = torch.tensor(len(neighbors) * [i])
-            self.senders = torch.cat([self.senders, senders])
-
-            receivers = torch.tensor(neighbors, dtype=torch.int64)
-            self.receivers = torch.cat([self.receivers, receivers])
-
-            self.edges = torch.cat([self.edges, torch.zeros(len(neighbors), 1)])
-
-        self.n_edges = self.edges.size(0)
+        self.receivers = torch.tensor(edges[:, 0], dtype=torch.int64)
+        self.senders = torch.tensor(edges[:, 1], dtype=torch.int64)
+        self.n_edges = self.receivers.size(0)
+        self.edges = torch.zeros(self.n_edges, 1)

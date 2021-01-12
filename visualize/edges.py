@@ -1,7 +1,8 @@
-import matplotlib as mpl
 import matplotlib.pyplot as plt
 import networkx as nx
+import time
 import torch
+import datetime
 import argparse
 from graph_nn_physics import Graph
 from .dataset import get_hdf5
@@ -17,11 +18,14 @@ if __name__ == '__main__':
     fig = plt.figure()
 
     data = torch.tensor(get_hdf5(args.dir, args.path, args.rollout))
+    print(data.shape)
     init_nodes = data[0]
 
     graph = Graph(init_nodes)
-    graph.gen_edges(args.radius)
-    print(graph.n_edges)
+    start = time.time()
+    graph.gen_edges(float(args.radius))
+    tstr = str(datetime.timedelta(seconds=time.time() - start) / datetime.timedelta(milliseconds=1))
+    print('K-D Tree time: {}ms'.format(tstr))
 
     G = nx.Graph()
     G.add_nodes_from([x for x in range(0, graph.n_nodes)])

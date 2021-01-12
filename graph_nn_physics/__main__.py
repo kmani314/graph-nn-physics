@@ -1,8 +1,9 @@
-from .gnn import GraphNetwork
-from .data import SimulationDataset, collate_fn
+from gnn import GraphNetwork
+from data import SimulationDataset, collate_fn
 import torch
 from torch.utils.data import DataLoader
-from torch.autograd.profiler import profile
+# from torch.autograd.profiler import profile
+import time as timer
 import argparse
 
 if __name__ == '__main__':
@@ -18,7 +19,7 @@ if __name__ == '__main__':
         node_dim=25,
         edge_dim=1,
         global_dim=1,
-        mp_steps=4,
+        mp_steps=8,
         proc_hidden_dim=64,
         encoder_hidden_dim=16, decoder_hidden_dim=16,
         dim=3,
@@ -32,12 +33,14 @@ if __name__ == '__main__':
         dataset,
         batch_size=2,
         shuffle=True,
-        collate_fn=collate_fn
+        collate_fn=lambda x: collate_fn(x, device)
     )
 
-    with profile() as prof:
-        for i in loader:
-            out = network(i[0])
-            print(out)
-            break
-    print(prof.key_averages().table(sort_by="self_cpu_time_total"))
+    # with profile(use_cuda=True, record_shapes=True) as prof:
+    start = timer.time()
+    for i in loader:
+        out = network(i[0])
+        print(out)
+        break
+    print('Iteration total: {}'.format(timer.time() - start))
+    # print(prof.key_averages(group_by_input_shape=True))
