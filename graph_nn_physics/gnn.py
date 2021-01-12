@@ -175,6 +175,11 @@ class GraphNetwork(nn.Module):
 
             # sum receivers for every node
             scattered_edge_states = scatter(masked_edges, graph.receivers, dim=0)
+            # print(graph.receivers.shape)
+            # print(masked_edges.shape)
+            # scattered_edge_states = torch.zeros(
+            #     graph.receivers.shape
+            # ).scatter_add(0, graph.receivers.unsqueeze(1), masked_edges)
 
             # this should only be necessary if there are isolated nodes with no receiver edges
             scattered_edge_states = self._pad_items([scattered_edge_states], batch_nm)[0]
@@ -194,13 +199,9 @@ class GraphNetwork(nn.Module):
     def _process(self, latent_graph_tuple, batch_nm, batch_em):
         mp_intermediate = latent_graph_tuple
 
-        for i in range(0, self.mp_steps):
-            mp_intermediate = self._phi_e(mp_intermediate, self._edge_processors[i], batch_nm, batch_em)
-            mp_intermediate = self._phi_v(mp_intermediate, self._node_processors[i], batch_nm, batch_em)
-
-        # for np, ep in zip(self._node_processors, self._edge_processors):
-        #     mp_intermediate = self._phi_e(mp_intermediate, ep, batch_nm, batch_em)
-        #     mp_intermediate = self._phi_v(mp_intermediate, np, batch_nm, batch_em)
+        for np, ep in zip(self._node_processors, self._edge_processors):
+            mp_intermediate = self._phi_e(mp_intermediate, ep, batch_nm, batch_em)
+            mp_intermediate = self._phi_v(mp_intermediate, np, batch_nm, batch_em)
 
         return mp_intermediate
 
