@@ -16,7 +16,7 @@ if __name__ == '__main__':
     device = torch.device(params['device'])
 
     network = GraphNetwork(
-        node_dim=15,
+        node_dim=22,
         edge_dim=1,
         global_dim=1,
         mp_steps=params['mp_steps'],
@@ -46,7 +46,7 @@ if __name__ == '__main__':
     criterion = torch.nn.MSELoss()
 
     for epoch, batch in enumerate(tqdm(loader, total=params['epochs'])):
-        if epoch >= params['epochs'] - 1:
+        if epoch >= params['epochs']:
             break
         optimizer.zero_grad()
 

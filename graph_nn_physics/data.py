@@ -62,13 +62,13 @@ class SimulationDataset(Dataset):
         # print(vels.shape)
 
         attrs = self.file[self.group].attrs
-        mean = torch.tensor(attrs['vel_mean'])
-        std = torch.tensor(attrs['vel_std'])
+        # mean = torch.tensor(attrs['vel_mean'])
+        # std = torch.tensor(attrs['vel_std'])
         radius = attrs['default_connectivity_radius']
 
         # normalization
         # print('Pre normalization: {}'.format(vels))
-        vels = torch.div(torch.sub(vels, mean), std)
+        # vels = torch.div(torch.sub(vels, mean), std)
         # print('Post normalization: {}'.format(vels))
 
         # get next acceleration as next vel - last vel given to network

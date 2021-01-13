@@ -32,7 +32,7 @@ class GraphNetwork(nn.Module):
             edge_dim += dim + 1
 
         self._edge_encoder = self._construct_mlp(
-            edge_dim, encoder_hidden_dim, encoder_hidden, ee_dim, batch_norm=True)
+            edge_dim, encoder_hidden_dim, encoder_hidden, ee_dim)
 
         # phi_e/phi_v, process edges and nodes into intermediate latent states
         self._edge_processors = []
@@ -176,7 +176,6 @@ class GraphNetwork(nn.Module):
             masked_edges = torch.narrow(graph.edges, 0, 0, graph.n_edges)
 
             # sum receivers for every node
-
             receivers = graph.receivers.unsqueeze(1).repeat(1, self.ve_dim)
             zeros = torch.zeros_like(masked_edges)
             scattered_edge_states = zeros.scatter_add(0, receivers, masked_edges)
