@@ -14,11 +14,11 @@ class GraphNetwork(nn.Module):
             global_dim=1,
             mp_steps=8,
             proc_hidden_dim=128,
-            proc_hidden=4,
+            proc_hidden=2,
             encoder_hidden_dim=16,
-            encoder_hidden=4,
+            encoder_hidden=2,
             decoder_hidden_dim=16,
-            decoder_hidden=4,
+            decoder_hidden=2,
             dim=3,
             ve_dim=16, ee_dim=16, relative_encoder=True):
 
@@ -32,7 +32,7 @@ class GraphNetwork(nn.Module):
             edge_dim += dim + 1
 
         self._edge_encoder = self._construct_mlp(
-            edge_dim, encoder_hidden_dim, encoder_hidden, ee_dim)
+            edge_dim, encoder_hidden_dim, encoder_hidden, ee_dim, batch_norm=True)
 
         # phi_e/phi_v, process edges and nodes into intermediate latent states
         self._edge_processors = []
@@ -44,14 +44,14 @@ class GraphNetwork(nn.Module):
                 proc_hidden_dim,
                 proc_hidden,
                 ee_dim,
-                batch_norm=True))
+                batch_norm=False))
 
             self._node_processors.append(self._construct_mlp(
                 ee_dim + ve_dim + global_dim,
                 proc_hidden_dim,
                 proc_hidden,
                 ve_dim,
-                batch_norm=True))
+                batch_norm=False))
 
         # the decoder goes from the latent node dimension to
         # dimensional acceleration to be used in an euler integrator

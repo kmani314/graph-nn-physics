@@ -1,9 +1,10 @@
-from gnn import GraphNetwork
-from data import SimulationDataset, collate_fn
+from .gnn import GraphNetwork
+from .data import SimulationDataset, collate_fn
+from .hyperparams import params
+from torch.utils.tensorboard import SummaryWriter
+from tqdm import tqdm
 import torch
 from torch.utils.data import DataLoader
-# from torch.autograd.profiler import profile
-import time as timer
 import argparse
 
 if __name__ == '__main__':
@@ -12,35 +13,51 @@ if __name__ == '__main__':
     parser.add_argument('group')
     args = parser.parse_args()
 
-    # print(torch.ops.torch_scatter.cuda_version())
-    device = torch.device('cuda')
+    device = torch.device(params['device'])
 
     network = GraphNetwork(
-        node_dim=25,
+        node_dim=15,
         edge_dim=1,
         global_dim=1,
-        mp_steps=8,
-        proc_hidden_dim=64,
-        encoder_hidden_dim=16, decoder_hidden_dim=16,
-        dim=3,
-        ve_dim=16, ee_dim=16, relative_encoder=True
+        mp_steps=params['mp_steps'],
+        proc_hidden_dim=params['proc_hidden_dim'],
+        encoder_hidden_dim=params['encoder_hidden_dim'],
+        decoder_hidden_dim=params['decoder_hidden_dim'],
+        dim=params['dim'],
+        ve_dim=params['embedding_dim'],
+        ee_dim=params['embedding_dim'],
+        relative_encoder=params['relative_encoder']
     )
 
     network.to(device=device)
+    network.float()
 
-    dataset = SimulationDataset(args.dataset, args.group, 5)
+    dataset = SimulationDataset(args.dataset, args.group, params['vel_context'])
+
     loader = DataLoader(
         dataset,
-        batch_size=2,
+        batch_size=params['batch_size'],
         shuffle=True,
         collate_fn=lambda x: collate_fn(x, device)
     )
 
-    # with profile(use_cuda=True, record_shapes=True) as prof:
-    start = timer.time()
-    for i in loader:
-        out = network(i[0])
-        print(out)
-        break
-    print('Iteration total: {}'.format(timer.time() - start))
-    # print(prof.key_averages(group_by_input_shape=True))
+    writer = SummaryWriter()
+    optimizer = torch.optim.Adam(network.parameters(), lr=params['lr'])
+    criterion = torch.nn.MSELoss()
+
+    for epoch, batch in enumerate(tqdm(loader, total=params['epochs'])):
+        if epoch >= params['epochs'] - 1:
+            break
+        optimizer.zero_grad()
+
+        output = network(batch[0])
+
+        loss = torch.tensor(0, device=device, dtype=torch.float32)
+
+        for i, gt in enumerate(batch[1]):
+            trimmed = torch.narrow(output[i], 0, 0, batch[0][i].n_nodes)
+            loss += criterion(gt.float(), trimmed)
+
+        loss.backward()
+        optimizer.step()
+        writer.add_scalar('Training loss', loss, epoch)

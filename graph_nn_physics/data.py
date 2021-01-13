@@ -1,6 +1,6 @@
 from torch.utils.data import Dataset
 from numpy import random
-from graph import Graph
+from .graph import Graph
 # import time as timer
 import numpy as np
 import torch
@@ -16,9 +16,7 @@ def collate_fn(batch, device):
         i.globals = i.globals.to(device)
         i.edges = i.edges.to(device)
 
-    gt = [x[1] for x in batch]
-    for i in gt:
-        i = i.to(device=device)
+    gt = [x[1].to(device=device) for x in batch]
 
     return (graphs, gt)
 
@@ -54,10 +52,14 @@ class SimulationDataset(Dataset):
         begin = random.randint(rollout.size(0) - self.vel_seq) + self.vel_seq - 1
         vels = []
 
-        for i in reversed(range(0, self.vel_seq + 1)):
+        for i in reversed(range(0, self.vel_seq)):
+            # print(rollout[begin - i])
+            # print(rollout[begin - i - 1])
+            # print(rollout[begin - i] - rollout[begin - i - 1])
             vels.append(rollout[begin - i] - rollout[begin - i - 1])
 
         vels = torch.stack(vels, dim=1)
+        # print(vels.shape)
 
         attrs = self.file[self.group].attrs
         mean = torch.tensor(attrs['vel_mean'])
@@ -65,14 +67,19 @@ class SimulationDataset(Dataset):
         radius = attrs['default_connectivity_radius']
 
         # normalization
+        # print('Pre normalization: {}'.format(vels))
         vels = torch.div(torch.sub(vels, mean), std)
+        # print('Post normalization: {}'.format(vels))
 
         # get next acceleration as next vel - last vel given to network
         gt = vels[:, -1] - vels[:, -2]
+        # print(gt)
         vels = vels[:, :-1]
         vels = vels.view(vels.size(0), vels.size(1) * vels.size(2))
+        # print(vels.shape)
 
         pos = rollout[begin]
+        # print('Positions: {}'.format(rollout[begin - self.vel_seq:begin]))
 
         # boundaries
         lower = torch.tensor(attrs['bounds'][:, 0])
@@ -83,13 +90,9 @@ class SimulationDataset(Dataset):
 
         # if using a particle type embedding, move this elsewhere
         nodes = torch.cat([pos, vels, dist, types], dim=1)
-        # print('Dataset Processing: {}'.format(timer.time() - start2))
-        # start3 = timer.time()
 
         graph = Graph(pos, globals=torch.tensor(1))
         graph.gen_edges(float(radius))
         graph.nodes = nodes
 
-        # print('K-D tree execution time: {}'.format(timer.time() - start3))
-        # print('Dataloader __getitem__: {}'.format(timer.time() - start))
         return [graph, gt]
