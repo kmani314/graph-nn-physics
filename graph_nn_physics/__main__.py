@@ -43,7 +43,7 @@ if __name__ == '__main__':
 
     writer = SummaryWriter()
     optimizer = torch.optim.Adam(network.parameters(), lr=params['lr'])
-    criterion = torch.nn.MSELoss()
+    criterion = torch.nn.MSELoss(reduce='sum')
 
     for epoch, batch in enumerate(tqdm(loader, total=params['epochs'])):
         if epoch >= params['epochs']:
@@ -55,8 +55,12 @@ if __name__ == '__main__':
         loss = torch.tensor(0, device=device, dtype=torch.float32)
 
         for i, gt in enumerate(batch[1]):
+            mean = torch.tensor(batch[0][i].attrs['acc_mean'])
+            std = torch.tensor(batch[0][i].attrs['acc_std'])
+
             trimmed = torch.narrow(output[i], 0, 0, batch[0][i].n_nodes)
-            loss += criterion(gt.float(), trimmed)
+            trimmed = torch.div(torch.sub(trimmed, mean), std)
+            loss += criterion(gt.float(), trimmed.float())
 
         loss.backward()
         optimizer.step()

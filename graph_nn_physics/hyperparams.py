@@ -1,7 +1,7 @@
 params = dict(
     device='cpu',
     epochs=10e4,
-    lr=1e-4,
+    lr=4e-4,
     mp_steps=4,
     embedding_dim=32,
     dim=3,
@@ -10,5 +10,5 @@ params = dict(
     decoder_hidden_dim=16,
     relative_encoder=True,
     vel_context=5,
-    batch_size=1,
+    batch_size=4,
 )

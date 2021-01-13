@@ -47,39 +47,28 @@ class SimulationDataset(Dataset):
         particle_types.read_direct(arr)
         types = torch.tensor(arr).unsqueeze(1)
 
-        # print('Dataset IO: {}'.format(timer.time() - start))
-        # start2 = timer.time()
         begin = random.randint(rollout.size(0) - self.vel_seq) + self.vel_seq - 1
         vels = []
 
         for i in reversed(range(0, self.vel_seq)):
-            # print(rollout[begin - i])
-            # print(rollout[begin - i - 1])
-            # print(rollout[begin - i] - rollout[begin - i - 1])
             vels.append(rollout[begin - i] - rollout[begin - i - 1])
 
         vels = torch.stack(vels, dim=1)
-        # print(vels.shape)
 
         attrs = self.file[self.group].attrs
-        # mean = torch.tensor(attrs['vel_mean'])
-        # std = torch.tensor(attrs['vel_std'])
+        mean = torch.tensor(attrs['vel_mean'])
+        std = torch.tensor(attrs['vel_std'])
         radius = attrs['default_connectivity_radius']
 
         # normalization
-        # print('Pre normalization: {}'.format(vels))
-        # vels = torch.div(torch.sub(vels, mean), std)
-        # print('Post normalization: {}'.format(vels))
+        vels = torch.div(torch.sub(vels, mean), std)
 
         # get next acceleration as next vel - last vel given to network
         gt = vels[:, -1] - vels[:, -2]
-        # print(gt)
         vels = vels[:, :-1]
         vels = vels.view(vels.size(0), vels.size(1) * vels.size(2))
-        # print(vels.shape)
 
         pos = rollout[begin]
-        # print('Positions: {}'.format(rollout[begin - self.vel_seq:begin]))
 
         # boundaries
         lower = torch.tensor(attrs['bounds'][:, 0])
@@ -94,5 +83,7 @@ class SimulationDataset(Dataset):
         graph = Graph(pos, globals=torch.tensor(1))
         graph.gen_edges(float(radius))
         graph.nodes = nodes
+
+        graph.attrs = attrs
 
         return [graph, gt]
