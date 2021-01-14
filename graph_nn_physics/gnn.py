@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-
+# from pytorch_memlab import profile
 
 class GraphNetwork(nn.Module):
     # ne_dim: vertex embedding dimension
@@ -20,13 +20,12 @@ class GraphNetwork(nn.Module):
             decoder_hidden_dim=16,
             decoder_hidden=2,
             dim=3,
-            ve_dim=16, ee_dim=16, relative_encoder=True):
+            ve_dim=128, ee_dim=128, relative_encoder=True):
 
         super(GraphNetwork, self).__init__()
         # embeds nodes and edges into latent representations
         self._node_encoder = self._construct_mlp(
-            node_dim + global_dim, encoder_hidden_dim, encoder_hidden, ve_dim)
-
+            node_dim + global_dim, encoder_hidden_dim, encoder_hidden, ve_dim, batch_norm=True)
         # relative encoder adds [dim] coords and norm to each edge
         if relative_encoder:
             edge_dim += dim + 1
@@ -44,14 +43,14 @@ class GraphNetwork(nn.Module):
                 proc_hidden_dim,
                 proc_hidden,
                 ee_dim,
-                batch_norm=False))
+                batch_norm=True))
 
             self._node_processors.append(self._construct_mlp(
                 ee_dim + ve_dim + global_dim,
                 proc_hidden_dim,
                 proc_hidden,
                 ve_dim,
-                batch_norm=False))
+                batch_norm=True))
 
         # the decoder goes from the latent node dimension to
         # dimensional acceleration to be used in an euler integrator
@@ -73,18 +72,19 @@ class GraphNetwork(nn.Module):
 
     def _construct_mlp(self, input, hidden_dim, hidden, output, batch_norm=False):
         layers = [nn.Linear(input, hidden_dim), nn.ReLU()]
+        nn.init.xavier_uniform_(layers[0].weight)
 
         if batch_norm:
             layers.append(nn.LayerNorm(hidden_dim))
 
         for i in range(0, hidden):
             layers.append(nn.Linear(hidden_dim, hidden_dim))
+            nn.init.xavier_uniform_(layers[-1].weight)
             layers.append(nn.ReLU())
             if batch_norm:
                 layers.append(nn.LayerNorm(hidden_dim))
 
         layers.append(nn.Linear(hidden_dim, output))
-        layers.append(nn.ReLU())
         return nn.Sequential(*layers)
 
     def _pad_items(self, items, length, value=0):
@@ -99,6 +99,7 @@ class GraphNetwork(nn.Module):
         global_tensor = self._pad_items([global_tensor], pad)[0]
         return global_tensor
 
+    # @profile
     def _encode(self, graph_batch, batch_nm, batch_em):
         for i in graph_batch:
             global_tensor = i.globals.repeat(i.n_nodes)
@@ -160,11 +161,10 @@ class GraphNetwork(nn.Module):
 
         batched_tensor_tuple = torch.stack(batched_tensor_tuple)
 
-        # print(batched_tensor_tuple.device)
-        next_latent_state = processor(batched_tensor_tuple)
+        batched_tensor_tuple = processor(batched_tensor_tuple)
 
         for i, graph in enumerate(graph_batch):
-            graph.edges = next_latent_state[i]
+            graph.edges = batched_tensor_tuple[i]
 
         return graph_batch
 
@@ -186,24 +186,23 @@ class GraphNetwork(nn.Module):
             phi_v_input = torch.cat([scattered_edge_states, graph.nodes, global_tensor], dim=1)
             node_update_batch.append(phi_v_input)
 
-        next_latent_state = torch.stack(node_update_batch)
-        next_latent_state = processor(next_latent_state)
+        node_update_batch = torch.stack(node_update_batch)
+        node_update_batch = processor(node_update_batch)
 
         for i, graph in enumerate(graph_batch):
-            graph.nodes = next_latent_state[i]
+            graph.nodes = node_update_batch[i]
 
         return graph_batch
 
     # @profile
     def _process(self, latent_graph_tuple, batch_nm, batch_em):
-        mp_intermediate = latent_graph_tuple
-
         for np, ep in zip(self._node_processors, self._edge_processors):
-            mp_intermediate = self._phi_e(mp_intermediate, ep, batch_nm, batch_em)
-            mp_intermediate = self._phi_v(mp_intermediate, np, batch_nm, batch_em)
+            latent_graph_tuple = self._phi_e(latent_graph_tuple, ep, batch_nm, batch_em)
+            latent_graph_tuple = self._phi_v(latent_graph_tuple, np, batch_nm, batch_em)
 
-        return mp_intermediate
+        return latent_graph_tuple
 
+    # @profile
     def _decode(self, latent_graph_tuple):
         acc = torch.stack([i.nodes for i in latent_graph_tuple])
         acc = self._decoder(acc)
@@ -224,8 +223,8 @@ class GraphNetwork(nn.Module):
                 batch_em = tmp
 
         # take in a list of graphs, batch them, return new graphs
-        latent_graph_tuple = self._encode(graph_batch, batch_nm, batch_em)
-        processed = self._process(latent_graph_tuple, batch_nm, batch_em)
-        acc = self._decode(processed)
+        graph_batch = self._encode(graph_batch, batch_nm, batch_em)
+        graph_batch = self._process(graph_batch, batch_nm, batch_em)
+        acc = self._decode(graph_batch)
 
         return acc

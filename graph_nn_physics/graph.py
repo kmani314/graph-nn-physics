@@ -31,3 +31,11 @@ class Graph():
         self.senders = torch.tensor(edges[:, 1], dtype=torch.int64)
         self.n_edges = self.receivers.size(0)
         self.edges = torch.zeros(self.n_edges, 1)
+
+    def to(self, device):
+        self.senders = self.senders.to(device)
+        self.receivers = self.receivers.to(device)
+        self.nodes = self.nodes.to(device)
+        self.globals = self.globals.to(device)
+        self.edges = self.edges.to(device)
+        self.vels = self.vels.to(device)

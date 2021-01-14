@@ -1,7 +1,6 @@
 from torch.utils.data import Dataset
 from numpy import random
 from .graph import Graph
-# import time as timer
 import numpy as np
 import torch
 import h5py
@@ -10,11 +9,7 @@ def collate_fn(batch, device):
     graphs = [x[0] for x in batch]
 
     for i in graphs:
-        i.senders = i.senders.to(device)
-        i.receivers = i.receivers.to(device)
-        i.nodes = i.nodes.to(device)
-        i.globals = i.globals.to(device)
-        i.edges = i.edges.to(device)
+        i.to(device)
 
     gt = [x[1].to(device=device) for x in batch]
 
@@ -24,13 +19,14 @@ class SimulationDataset(Dataset):
     def __init__(self, file, group, vel_seq):
         self.file = h5py.File(file, 'r')
         self.group = group
-        self.rollouts = len(self.file[self.group].keys())
+        self.rollouts = len(self.file[self.group]['positions'].keys())
         self.vel_seq = vel_seq
 
     def __len__(self):
         sum = 0
-        for i in self.file[self.group]['positions']:
-            sum += len(i)
+        for i in range(0, self.rollouts):
+            positions = self.file[self.group]['positions'].get(str(i))
+            sum += positions.shape[0]
         return sum
 
     def __getitem__(self, _):
@@ -65,8 +61,8 @@ class SimulationDataset(Dataset):
 
         # get next acceleration as next vel - last vel given to network
         gt = vels[:, -1] - vels[:, -2]
-        vels = vels[:, :-1]
-        vels = vels.view(vels.size(0), vels.size(1) * vels.size(2))
+        end_vel = vels[:, :-1]
+        end_vel = end_vel.view(end_vel.size(0), end_vel.size(1) * end_vel.size(2))
 
         pos = rollout[begin]
 
@@ -78,12 +74,14 @@ class SimulationDataset(Dataset):
         dist = torch.clamp(torch.div(dist, radius), -1, 1)
 
         # if using a particle type embedding, move this elsewhere
-        nodes = torch.cat([pos, vels, dist, types], dim=1)
+        nodes = torch.cat([pos, end_vel, dist, types], dim=1)
 
         graph = Graph(pos, globals=torch.tensor(1))
         graph.gen_edges(float(radius))
         graph.nodes = nodes
 
         graph.attrs = attrs
+        # not used for training, instead for inference
+        graph.vels = vels[:, -1]
 
         return [graph, gt]
