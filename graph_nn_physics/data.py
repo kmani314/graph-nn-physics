@@ -74,14 +74,23 @@ class SimulationDataset(Dataset):
         dist = torch.clamp(torch.div(dist, radius), -1, 1)
 
         # if using a particle type embedding, move this elsewhere
-        nodes = torch.cat([pos, end_vel, dist, types], dim=1)
+        nodes = torch.cat([end_vel, dist, types], dim=1)
 
-        graph = Graph(pos, globals=torch.tensor(1))
+        graph = Graph(pos)
         graph.gen_edges(float(radius))
+
+        senders = torch.index_select(graph.nodes, 0, graph.senders)
+        senders = torch.narrow(senders, 1, 0, attrs['dim'])
+        receivers = torch.index_select(graph.nodes, 0, graph.receivers)
+        receivers = torch.narrow(receivers, 1, 0, attrs['dim'])
+
+        positional = torch.div((senders - receivers), graph.radius)
+        norm = torch.norm(positional, dim=1).unsqueeze(1)
+        graph.edges = torch.cat([positional, norm], dim=1)
         graph.nodes = nodes
 
         graph.attrs = attrs
         # not used for training, instead for inference
-        graph.vels = vels[:, -1]
+        graph.vels = end_vel
 
         return [graph, gt]

@@ -4,11 +4,8 @@ import torch.nn.functional as F
 # from pytorch_memlab import profile
 
 class GraphNetwork(nn.Module):
-    # ne_dim: vertex embedding dimension
-    # ee_dim: edge embedding dimension
     def __init__(
             self,
-            # r_conn,
             node_dim=6,
             edge_dim=1,
             global_dim=1,
@@ -20,15 +17,13 @@ class GraphNetwork(nn.Module):
             decoder_hidden_dim=16,
             decoder_hidden=2,
             dim=3,
-            ve_dim=128, ee_dim=128, relative_encoder=True):
+            ve_dim=128, ee_dim=128):
 
         super(GraphNetwork, self).__init__()
+
         # embeds nodes and edges into latent representations
         self._node_encoder = self._construct_mlp(
             node_dim + global_dim, encoder_hidden_dim, encoder_hidden, ve_dim, batch_norm=True)
-        # relative encoder adds [dim] coords and norm to each edge
-        if relative_encoder:
-            edge_dim += dim + 1
 
         self._edge_encoder = self._construct_mlp(
             edge_dim, encoder_hidden_dim, encoder_hidden, ee_dim)
@@ -65,7 +60,6 @@ class GraphNetwork(nn.Module):
         self._node_processors = nn.ModuleList(self._node_processors)
 
         self.mp_steps = mp_steps
-        self.relative_encoder = relative_encoder
         self.dim = dim
         self.ve_dim = ve_dim
         self.ee_dim = ee_dim
@@ -85,6 +79,8 @@ class GraphNetwork(nn.Module):
                 layers.append(nn.LayerNorm(hidden_dim))
 
         layers.append(nn.Linear(hidden_dim, output))
+        nn.init.xavier_uniform_(layers[-1].weight)
+
         return nn.Sequential(*layers)
 
     def _pad_items(self, items, length, value=0):
@@ -111,25 +107,6 @@ class GraphNetwork(nn.Module):
 
         batched_nodes = torch.stack(padded_nodes)
         batched_edges = torch.stack(padded_edges)
-
-        # this part is difficult to batch but it doesn't matter because it's fast
-        if self.relative_encoder:
-            batched_relative_edges = []
-            for i, graph in enumerate(graph_batch):
-                # mask positions to force the network to learn
-                # positional invariance
-                senders = torch.index_select(batched_nodes[i], 0, graph.senders)
-                senders = torch.narrow(senders, 1, 0, self.dim)
-                receivers = torch.index_select(batched_nodes[i], 0, graph.receivers)
-                receivers = torch.narrow(receivers, 1, 0, self.dim)
-
-                positional = torch.div((senders - receivers), graph.radius)
-                norm = torch.norm(positional, dim=1).unsqueeze(1)
-                relative_edges = torch.cat([positional, norm], dim=1)
-                relative_edges = self._pad_items([relative_edges], batch_em)[0]
-
-                batched_relative_edges.append(torch.cat([batched_edges[i], relative_edges], dim=1))
-            batched_edges = torch.stack(batched_relative_edges)
 
         latent_nodes = self._node_encoder(batched_nodes.float())
         latent_edges = self._edge_encoder(batched_edges.float())
@@ -161,7 +138,7 @@ class GraphNetwork(nn.Module):
 
         batched_tensor_tuple = torch.stack(batched_tensor_tuple)
 
-        batched_tensor_tuple = processor(batched_tensor_tuple)
+        batched_tensor_tuple = processor(batched_tensor_tuple.float())
 
         for i, graph in enumerate(graph_batch):
             graph.edges = batched_tensor_tuple[i]
@@ -187,7 +164,7 @@ class GraphNetwork(nn.Module):
             node_update_batch.append(phi_v_input)
 
         node_update_batch = torch.stack(node_update_batch)
-        node_update_batch = processor(node_update_batch)
+        node_update_batch = processor(node_update_batch.float())
 
         for i, graph in enumerate(graph_batch):
             graph.nodes = node_update_batch[i]
@@ -210,17 +187,8 @@ class GraphNetwork(nn.Module):
 
     # @profile
     def forward(self, graph_batch):
-        batch_em = 0
-        batch_nm = 0
-
-        for i in graph_batch:
-            tmp = i.nodes.size(0)
-            if tmp > batch_nm:
-                batch_nm = tmp
-
-            tmp = i.edges.size(0)
-            if tmp > batch_em:
-                batch_em = tmp
+        batch_em = max([x.edges.size(0) for x in graph_batch])
+        batch_nm = max([x.nodes.size(0) for x in graph_batch])
 
         # take in a list of graphs, batch them, return new graphs
         graph_batch = self._encode(graph_batch, batch_nm, batch_em)
