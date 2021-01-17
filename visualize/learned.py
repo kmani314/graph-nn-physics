@@ -1,15 +1,14 @@
-import matplotlib.pyplot as plt
-import mpl_toolkits.mplot3d.axes3d as p3
-import matplotlib.animation as animation
-# import time
-import torch
-# import datetime
-import argparse
-from graph_nn_physics.graph import Graph
+from graph_nn_physics.data import SimulationDataset, collate_fn
 from graph_nn_physics.hyperparams import params
 from graph_nn_physics.gnn import GraphNetwork
-from graph_nn_physics.data import SimulationDataset, collate_fn
+from graph_nn_physics.util import graph_preprocessor
+import mpl_toolkits.mplot3d.axes3d as p3
+import matplotlib.animation as animation
+from graph_nn_physics.graph import Graph
 from torch.utils.data import DataLoader
+import matplotlib.pyplot as plt
+import argparse
+import torch
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -29,8 +28,8 @@ if __name__ == '__main__':
     )
 
     network = GraphNetwork(
-        node_dim=(params['vel_context'] + 2) * params['dim'] + 1,
-        edge_dim=1,
+        node_dim=(params['vel_context'] + 1) * params['dim'] + 1,
+        edge_dim=params['dim'] + 1,
         global_dim=1,
         mp_steps=params['mp_steps'],
         proc_hidden_dim=params['proc_hidden_dim'],
@@ -39,7 +38,6 @@ if __name__ == '__main__':
         dim=params['dim'],
         ve_dim=params['embedding_dim'],
         ee_dim=params['embedding_dim'],
-        relative_encoder=params['relative_encoder']
     )
 
     network.load_state_dict(torch.load(args.model))
@@ -49,7 +47,7 @@ if __name__ == '__main__':
     sample_state = next(iter(loader))
 
     pos = []
-    pos.append(sample_state[0][0].nodes[:, 0:params['dim']])
+    pos.append(sample_state[0][0].pos)
     curr_graph = sample_state[0]
     radius = curr_graph[0].attrs['default_connectivity_radius']
 
@@ -58,22 +56,21 @@ if __name__ == '__main__':
         output = network(curr_graph)
 
         curr_graph = curr_graph[0]
-
         mean = torch.tensor(curr_graph.attrs['acc_mean'], device=device)
         std = torch.tensor(curr_graph.attrs['acc_std'], device=device)
-
         trimmed = torch.narrow(output[0], 0, 0, curr_graph.n_nodes)
         acc = torch.div(torch.sub(trimmed, mean), std)
 
         # omit delta_t
-        new_vels = curr_graph.vels + acc
-        new_pos = pos[-1] + curr_graph.vels
-
+        new_vels = curr_graph.vels[-1] + acc
+        new_pos = pos[-1] + new_vels
+        types = curr_graph.types
+        vels = torch.cat([curr_graph.vels[:-1], new_vels])
         pos.append(new_pos)
 
-        curr_graph = Graph(new_pos.cpu(), globals=torch.tensor(1))
-        curr_graph.vels = new_vels
-        curr_graph.gen_edges(radius)
+        curr_graph = Graph(new_pos.cpu())
+        curr_graph = graph_preprocessor(curr_graph, vels, types)
+
         curr_graph.to(device)
         curr_graph = [curr_graph]
 

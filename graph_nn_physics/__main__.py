@@ -1,13 +1,13 @@
-from .gnn import GraphNetwork
-from .data import SimulationDataset, collate_fn
-from .hyperparams import params
 from torch.utils.tensorboard import SummaryWriter
-from tqdm import tqdm
-import torch
-from os.path import join
+from .data import SimulationDataset, collate_fn
 from torch.utils.data import DataLoader
-# import torch.autograd.profiler as profiler
+from .util import decoder_normalizer
+from .hyperparams import params
+from .gnn import GraphNetwork
+from os.path import join
+from tqdm import tqdm
 import argparse
+import torch
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -32,7 +32,6 @@ if __name__ == '__main__':
     )
 
     network.to(device=device)
-    network.float()
 
     dataset = SimulationDataset(args.dataset, args.group, params['vel_context'])
 
@@ -58,7 +57,6 @@ if __name__ == '__main__':
 
         optimizer.zero_grad()
 
-        # with profiler.profile(use_cuda=True, profile_memory=True, record_shapes=True) as prof:
         output = network(batch[0])
 
         loss = torch.tensor(0, device=device, dtype=torch.float32)
@@ -66,9 +64,8 @@ if __name__ == '__main__':
         for i, gt in enumerate(batch[1]):
             mean = torch.tensor(batch[0][i].attrs['acc_mean'], device=device)
             std = torch.tensor(batch[0][i].attrs['acc_std'], device=device)
-
             trimmed = torch.narrow(output[i], 0, 0, batch[0][i].n_nodes)
-            trimmed = torch.div(torch.sub(trimmed, mean), std)
+            trimmed = decoder_normalizer(trimmed, mean, std)
             loss += criterion(gt.float(), trimmed.float())
 
         loss = torch.div(loss, params['batch_size'])
@@ -76,12 +73,10 @@ if __name__ == '__main__':
         loss.backward()
         optimizer.step()
 
-        # print(prof.key_averages().table(sort_by='cuda_memory_usage'))
-
         if (epoch + 1) % params['decay_interval'] == 0:
             decay.step()
 
         writer.add_scalar('MSELoss', loss, epoch)
         writer.add_scalar('ExponentialLR', decay.get_last_lr()[0], epoch)
 
-        del loss
+        del loss, output

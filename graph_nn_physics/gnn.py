@@ -108,8 +108,8 @@ class GraphNetwork(nn.Module):
         batched_nodes = torch.stack(padded_nodes)
         batched_edges = torch.stack(padded_edges)
 
-        latent_nodes = self._node_encoder(batched_nodes.float())
-        latent_edges = self._edge_encoder(batched_edges.float())
+        latent_nodes = self._node_encoder(batched_nodes)
+        latent_edges = self._edge_encoder(batched_edges)
 
         for i, graph in enumerate(graph_batch):
             graph.nodes = latent_nodes[i]
@@ -138,7 +138,7 @@ class GraphNetwork(nn.Module):
 
         batched_tensor_tuple = torch.stack(batched_tensor_tuple)
 
-        batched_tensor_tuple = processor(batched_tensor_tuple.float())
+        batched_tensor_tuple = processor(batched_tensor_tuple)
 
         for i, graph in enumerate(graph_batch):
             graph.edges = batched_tensor_tuple[i]
@@ -164,7 +164,7 @@ class GraphNetwork(nn.Module):
             node_update_batch.append(phi_v_input)
 
         node_update_batch = torch.stack(node_update_batch)
-        node_update_batch = processor(node_update_batch.float())
+        node_update_batch = processor(node_update_batch)
 
         for i, graph in enumerate(graph_batch):
             graph.nodes = node_update_batch[i]

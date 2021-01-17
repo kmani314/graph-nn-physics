@@ -18,7 +18,7 @@ class Graph():
 
         self.globals = globals
         if self.globals is None:
-            self.globals = torch.tensor(0, dtype=torch.double)
+            self.globals = torch.tensor(0.)
 
     def gen_edges(self, radius):
         self.radius = radius
