@@ -41,4 +41,4 @@ def graph_preprocessor(graph, vels, types):
     return graph
 
 def decoder_normalizer(acc, mean, std):
-    return torch.div(torch.sub(acc, mean), std)
+    return torch.div(torch.sub(acc, mean), std).float()

@@ -57,18 +57,18 @@ if __name__ == '__main__':
 
         optimizer.zero_grad()
 
-        output = network(batch[0])
+        with torch.cuda.amp.autocast():
+            output = network(batch[0])
+            loss = torch.tensor(0., device=device)
 
-        loss = torch.tensor(0, device=device, dtype=torch.float32)
+            for i, gt in enumerate(batch[1]):
+                mean = torch.tensor(batch[0][i].attrs['acc_mean'], device=device)
+                std = torch.tensor(batch[0][i].attrs['acc_std'], device=device)
+                trimmed = torch.narrow(output[i], 0, 0, batch[0][i].n_nodes)
+                trimmed = decoder_normalizer(trimmed, mean, std)
+                loss += criterion(gt, trimmed)
 
-        for i, gt in enumerate(batch[1]):
-            mean = torch.tensor(batch[0][i].attrs['acc_mean'], device=device)
-            std = torch.tensor(batch[0][i].attrs['acc_std'], device=device)
-            trimmed = torch.narrow(output[i], 0, 0, batch[0][i].n_nodes)
-            trimmed = decoder_normalizer(trimmed, mean, std)
-            loss += criterion(gt.float(), trimmed.float())
-
-        loss = torch.div(loss, params['batch_size'])
+            loss = torch.div(loss, params['batch_size']).float()
 
         loss.backward()
         optimizer.step()
