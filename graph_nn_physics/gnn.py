@@ -66,20 +66,17 @@ class GraphNetwork(nn.Module):
 
     def _construct_mlp(self, input, hidden_dim, hidden, output, batch_norm=False):
         layers = [nn.Linear(input, hidden_dim), nn.ReLU()]
-        nn.init.xavier_uniform_(layers[0].weight)
 
         if batch_norm:
             layers.append(nn.LayerNorm(hidden_dim))
 
         for i in range(0, hidden):
             layers.append(nn.Linear(hidden_dim, hidden_dim))
-            nn.init.xavier_uniform_(layers[-1].weight)
             layers.append(nn.ReLU())
             if batch_norm:
                 layers.append(nn.LayerNorm(hidden_dim))
 
         layers.append(nn.Linear(hidden_dim, output))
-        nn.init.xavier_uniform_(layers[-1].weight)
 
         return nn.Sequential(*layers)
 

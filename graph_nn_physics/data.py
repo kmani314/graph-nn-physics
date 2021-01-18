@@ -1,14 +1,13 @@
 from torch.utils.data import Dataset
 from numpy import random
 from .graph import Graph
-from .util import graph_preprocessor
+from .util import graph_preprocessor, decoder_normalizer
 import numpy as np
 import torch
 import h5py
 
 def collate_fn(batch, device):
     graphs = [x[0] for x in batch]
-
     for i in graphs:
         i.to(device)
 
@@ -44,27 +43,32 @@ class SimulationDataset(Dataset):
         particle_types.read_direct(arr)
         types = torch.tensor(arr).unsqueeze(1).float()
 
-        begin = random.randint(rollout.size(0) - self.vel_seq) + self.vel_seq - 1
+        begin = random.randint(rollout.size(0) - self.vel_seq - 1) + 1
         vels = []
 
-        for i in reversed(range(0, self.vel_seq)):
-            vels.append(rollout[begin - i] - rollout[begin - i - 1])
+        # for i in reversed(range(0, self.vel_seq)):
+        #     vels.append(rollout[begin - i] - rollout[begin - i - 1])
+
+        for i in range(self.vel_seq):
+            vels.append(rollout[begin + i] - rollout[begin + i - 1])
 
         vels = torch.stack(vels, dim=1)
 
         attrs = self.file[self.group].attrs
-        mean = torch.tensor(attrs['vel_mean'])
-        std = torch.tensor(attrs['vel_std'])
 
-        # normalization
-        vels = torch.div(torch.sub(vels, mean), std).float()
+        # mean = torch.tensor(attrs['vel_mean'])
+        # std = torch.tensor(attrs['vel_std'])
+        # vels = decoder_normalizer(vels, mean, std)
 
         # get next acceleration as next vel - last vel given to network
-        gt = vels[:, -1] - vels[:, -2]
-        end_vel = vels[:, :-1]
-        end_vel = end_vel.view(end_vel.size(0), end_vel.size(1) * end_vel.size(2))
+        idx = begin + self.vel_seq
+        gt = rollout[idx] - 2 * rollout[idx - 1] + rollout[idx - 2]
 
-        pos = rollout[begin]
+        # amean = torch.tensor(attrs['acc_mean'])
+        # astd = torch.tensor(attrs['acc_std'])
+        # gt = decoder_normalizer(gt, amean, astd)
+
+        pos = rollout[idx - 1]
         graph = Graph(pos)
         graph.attrs = attrs
 

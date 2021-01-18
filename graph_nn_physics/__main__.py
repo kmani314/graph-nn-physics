@@ -19,7 +19,7 @@ if __name__ == '__main__':
     device = torch.device(params['device'])
 
     network = GraphNetwork(
-        node_dim=(params['vel_context'] + 1) * params['dim'] + 1,
+        node_dim=(params['vel_context'] + 2) * params['dim'] + 1,
         edge_dim=params['dim'] + 1,
         global_dim=1,
         mp_steps=params['mp_steps'],
@@ -62,10 +62,7 @@ if __name__ == '__main__':
         loss = torch.tensor(0, device=device, dtype=torch.float32)
 
         for i, gt in enumerate(batch[1]):
-            mean = torch.tensor(batch[0][i].attrs['acc_mean'], device=device)
-            std = torch.tensor(batch[0][i].attrs['acc_std'], device=device)
             trimmed = torch.narrow(output[i], 0, 0, batch[0][i].n_nodes)
-            trimmed = decoder_normalizer(trimmed, mean, std)
             loss += criterion(gt.float(), trimmed.float())
 
         loss = torch.div(loss, params['batch_size'])
