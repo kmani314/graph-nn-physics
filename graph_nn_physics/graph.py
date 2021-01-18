@@ -3,22 +3,19 @@ import numpy as np
 import torch
 
 class Graph():
-    def __init__(self, nodes, edges=None, senders=None, receivers=None, globals=None):
+    def __init__(self, nodes):
         self.nodes = nodes
         self.n_nodes = self.nodes.size(0)
         self.node_dim = self.nodes.size(1)
 
-        self.edges = edges
-        self.receivers = receivers
-        self.senders = senders
+        self.vels = torch.tensor([])
+        self.types = torch.tensor([])
+        self.pos = torch.tensor([])
 
-        if edges is not None:
-            self.n_edges = self.edges.size(0)
-            self.edge_dim = self.edges.size(1)
-
-        self.globals = globals
-        if self.globals is None:
-            self.globals = torch.tensor(0.)
+        self.edges = torch.tensor([])
+        self.receivers = torch.tensor([])
+        self.senders = torch.tensor([])
+        self.globals = torch.tensor(0.)
 
     def gen_edges(self, radius):
         self.radius = radius
@@ -39,3 +36,5 @@ class Graph():
         self.globals = self.globals.to(device)
         self.edges = self.edges.to(device)
         self.vels = self.vels.to(device)
+        self.pos = self.pos.to(device)
+        self.types = self.types.to(device)
