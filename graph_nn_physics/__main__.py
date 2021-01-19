@@ -33,7 +33,7 @@ if __name__ == '__main__':
 
     network.to(device=device)
 
-    dataset = SimulationDataset(args.dataset, args.group, params['vel_context'])
+    dataset = SimulationDataset(args.dataset, args.group, params['vel_context'], normalization=params['normalization'])
 
     loader = DataLoader(
         dataset,
@@ -60,10 +60,18 @@ if __name__ == '__main__':
         output = network(batch[0])
 
         loss = torch.tensor(0, device=device, dtype=torch.float32)
+        differences = []
 
         for i, gt in enumerate(batch[1]):
             trimmed = torch.narrow(output[i], 0, 0, batch[0][i].n_nodes)
+            differences.append(trimmed - gt)
             loss += criterion(gt.float(), trimmed.float())
+
+        norm_difference = 0
+        with torch.no_grad():
+            norm_difference = torch.mean(
+                torch.tensor([torch.linalg.norm(x) for x in differences])
+            )
 
         loss = torch.div(loss, params['batch_size'])
 
@@ -73,6 +81,9 @@ if __name__ == '__main__':
         if (epoch + 1) % params['decay_interval'] == 0:
             decay.step()
 
+        # writer.add_scalar('Acceleration norm', norm, epoch)
+        # writer.add_scalar('Ground truth norm', gt_norm, epoch)
+        writer.add_scalar('Relative', norm_difference, epoch)
         writer.add_scalar('MSELoss', loss, epoch)
         writer.add_scalar('ExponentialLR', decay.get_last_lr()[0], epoch)
 

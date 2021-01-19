@@ -153,6 +153,8 @@ class GraphNetwork(nn.Module):
             receivers = graph.receivers.unsqueeze(1).repeat(1, self.ve_dim)
             zeros = torch.zeros_like(masked_edges)
             scattered_edge_states = zeros.scatter_add(0, receivers, masked_edges)
+            indices = torch.unique_consecutive(receivers)
+            scattered_edge_states = torch.index_select(scattered_edge_states, 0, indices)
 
             # this should only be necessary if there are isolated nodes with no receiver edges
             scattered_edge_states = self._pad_items([scattered_edge_states], batch_nm)[0]

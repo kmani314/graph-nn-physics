@@ -10,8 +10,8 @@ def graph_preprocessor(graph, vels, types):
 
     radius = attrs['default_connectivity_radius']
 
-    lower = torch.tensor(attrs['bounds'][:, 0])
-    upper = torch.tensor(attrs['bounds'][:, 1])
+    lower = torch.tensor(attrs['bounds'][:, 0]).unsqueeze(0)
+    upper = torch.tensor(attrs['bounds'][:, 1]).unsqueeze(0)
 
     dist = torch.cat([pos - lower, upper - pos], dim=1)
     dist = torch.clamp(dist / radius, -1, 1)

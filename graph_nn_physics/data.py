@@ -16,11 +16,12 @@ def collate_fn(batch, device):
     return (graphs, gt)
 
 class SimulationDataset(Dataset):
-    def __init__(self, file, group, vel_seq):
+    def __init__(self, file, group, vel_seq, normalization=True):
         self.file = h5py.File(file, 'r')
         self.group = group
         self.rollouts = len(self.file[self.group]['positions'].keys())
         self.vel_seq = vel_seq
+        self.normalization = normalization
 
     def __len__(self):
         sum = 0
@@ -56,17 +57,17 @@ class SimulationDataset(Dataset):
 
         attrs = self.file[self.group].attrs
 
-        # mean = torch.tensor(attrs['vel_mean'])
-        # std = torch.tensor(attrs['vel_std'])
-        # vels = decoder_normalizer(vels, mean, std)
-
         # get next acceleration as next vel - last vel given to network
         idx = begin + self.vel_seq
         gt = rollout[idx] - 2 * rollout[idx - 1] + rollout[idx - 2]
 
-        # amean = torch.tensor(attrs['acc_mean'])
-        # astd = torch.tensor(attrs['acc_std'])
-        # gt = decoder_normalizer(gt, amean, astd)
+        if self.normalization:
+            mean = torch.tensor(attrs['vel_mean'])
+            std = torch.tensor(attrs['vel_std'])
+            vels = decoder_normalizer(vels, mean, std)
+            amean = torch.tensor(attrs['acc_mean'])
+            astd = torch.tensor(attrs['acc_std'])
+            gt = decoder_normalizer(gt, amean, astd)
 
         pos = rollout[idx - 1]
         graph = Graph(pos)
