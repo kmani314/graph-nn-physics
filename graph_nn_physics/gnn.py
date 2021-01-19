@@ -146,15 +146,18 @@ class GraphNetwork(nn.Module):
     def _phi_v(self, graph_batch, processor, batch_nm, batch_em):
         node_update_batch = []
         for graph in graph_batch:
+
             # mask out padded embedded edges
             masked_edges = torch.narrow(graph.edges, 0, 0, graph.n_edges)
-
             # sum receivers for every node
             receivers = graph.receivers.unsqueeze(1).repeat(1, self.ve_dim)
+
+            if graph.edges.size(0) < graph.n_nodes:
+                masked_edges = self._pad_items([masked_edges], graph.n_nodes)[0]
+                receivers = self._pad_items([receivers], graph.n_nodes)[0]
+
             zeros = torch.zeros_like(masked_edges)
             scattered_edge_states = zeros.scatter_add(0, receivers, masked_edges)
-            indices = torch.unique_consecutive(receivers)
-            scattered_edge_states = torch.index_select(scattered_edge_states, 0, indices)
 
             # this should only be necessary if there are isolated nodes with no receiver edges
             scattered_edge_states = self._pad_items([scattered_edge_states], batch_nm)[0]

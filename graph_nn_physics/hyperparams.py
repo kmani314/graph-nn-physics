@@ -1,5 +1,5 @@
 params = dict(
-    device='cuda',
+    device='cpu',
     epochs=10e4,
     lr=8e-5,
     gamma=0.1,

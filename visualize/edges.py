@@ -3,6 +3,7 @@ import time
 import torch
 import datetime
 import argparse
+import torch.nn.functional as F
 from graphviz import Digraph
 from graph_nn_physics import Graph
 from .dataset import get_hdf5
@@ -34,14 +35,18 @@ if __name__ == '__main__':
     for i, p in enumerate(graph.nodes.numpy()):
         pos[i] = p
 
-    edge_props = torch.arange(0, edges.size(0), dtype=torch.float32).unsqueeze(1)
-    receivers = graph.receivers.unsqueeze(1)
-    zeros = torch.zeros_like(edge_props)
-    scattered_edge_states = zeros.scatter_add(0, receivers, edge_props)
-    indices = torch.unique_consecutive(receivers)
-    scattered_edge_states = torch.index_select(scattered_edge_states, 0, indices).squeeze().numpy()
+    # edge_props = torch.arange(0, edges.size(0), dtype=torch.float32).unsqueeze(1).repeat(1, 5)
+    edge_props = torch.arange(0, edges.size(0), dtype=torch.float32)
+    receivers = graph.receivers
 
-    node_labels = {i: '{}, idx: {}'.format(scattered_edge_states[i], i) for i in range(graph.n_nodes)}
+    if edges.size(0) < graph.n_nodes:
+        edge_props = F.pad(edge_props, (0, graph.n_nodes - edge_props.size(0)))
+        receivers = F.pad(graph.receivers, (0, graph.n_nodes - edge_props.size(0)))
+
+    edge_props = edge_props.unsqueeze(1)
+    receivers = receivers.unsqueeze(1)
+    zeros = torch.zeros_like(edge_props)
+    scattered_edge_states = zeros.scatter_add(0, receivers, edge_props).squeeze().numpy()
 
     G = Digraph(engine='neato')
 
@@ -49,12 +54,13 @@ if __name__ == '__main__':
     max_x = max([p[0].item() for p in graph.nodes])
     min_y = min([p[1].item() for p in graph.nodes])
     max_y = max([p[1].item() for p in graph.nodes])
-    coord_scale = 15
+    coord_scale = 25
 
     for i, n in enumerate(graph.nodes):
         G.node(
             str(i),
-            label='{}'.format(scattered_edge_states[i]),
+            label='{}: {}'.format(i, scattered_edge_states[i]),
+            # label='{}'.format(i),
             fontcolor='white',
             style='filled',
             color='white',
@@ -64,7 +70,7 @@ if __name__ == '__main__':
                 coord_scale * (n[0] - min_x) / (max_x - min_x),
                 coord_scale * (n[1] - min_y) / (max_y - min_y),
             ),
-            width='0.75',
+            width='1.25',
             fixedsize='true',
             pin='true',
         )
@@ -74,7 +80,6 @@ if __name__ == '__main__':
             str(n[0].item()),
             str(n[1].item()),
             label=str(edge_props[i].item()),
-            # splines='curved',
             penwidth='2'
         )
 
