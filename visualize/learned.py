@@ -13,8 +13,8 @@ import torch
 
 
 def animation_func(num, data, points, speed, dim):
-    # points._offsets3d = (data[num * speed][:, 0], data[num * speed][:, 2], data[num * speed][:, 1])  # , data[num][:, 1])
-    points._offsets3d = [data[num * speed][:, i] for i in range(dim)] + [0]
+    points._offsets3d = (data[num * speed][:, 0], 0, data[num * speed][:, 1])  # , data[num][:, 1])
+    # points._offsets3d = [data[num * speed][:, i] for i in range(dim)] + [0]
     return points
 
 
@@ -28,7 +28,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     device = torch.device(params['device'])
-    dataset = SimulationDataset(args.dataset, args.group, params['vel_context'])
+    dataset = SimulationDataset(args.dataset, args.group, params['vel_context'], normalization=params['normalization'])
 
     loader = DataLoader(
         dataset,
@@ -38,7 +38,7 @@ if __name__ == '__main__':
     )
 
     network = GraphNetwork(
-        node_dim=(params['vel_context'] + 2) * params['dim'] + 1,
+        node_dim=(params['vel_context'] + 3) * params['dim'] + 1,
         edge_dim=params['dim'] + 1,
         global_dim=1,
         mp_steps=params['mp_steps'],
@@ -75,13 +75,14 @@ if __name__ == '__main__':
             std = torch.tensor(attrs['acc_std'])
 
             trimmed = torch.narrow(output[0], 0, 0, curr_graph.n_nodes)
-            acc = normalized_to_real(trimmed, mean, std)
+            # acc = normalized_to_real(trimmed, mean, std)
+            acc = trimmed
 
             # omit delta_t
-            new_vels = curr_graph.vels[:, -1] + acc
+            new_vels = curr_graph.vels[-1] + acc
             new_pos = pos[-1].to(device='cpu') + new_vels
             types = curr_graph.types
-            vels = torch.cat([curr_graph.vels[:, 1:], new_vels.unsqueeze(1)], dim=1)
+            vels = torch.cat([curr_graph.vels[1:], new_vels.unsqueeze(0)])
             pos.append(new_pos)
             new_pos = new_pos.float()
 
@@ -108,8 +109,6 @@ if __name__ == '__main__':
     ax.set_zlim3d([0, 0.9])
     ax.set_zlabel('Z')
 
-    # points = ax.scatter(pos[0][:, 0], pos[0][:, 2], pos[0][:, 1])  # , data[0][:, 1], s=1000, alpha=0.8)
-    points = [pos[0][:, i] for i in range(dim)]
-    points = ax.scatter(points, 0, s=10)
+    points = ax.scatter(pos[0][:, 0], 0, pos[0][:, 1])  # , data[0][:, 1], s=1000, alpha=0.8)
     anim = animation.FuncAnimation(fig, animation_func, int(pos.shape[0] / int(args.speed)), fargs=(pos, points, int(args.speed), dim), interval=1)
     plt.show()

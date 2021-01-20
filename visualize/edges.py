@@ -18,7 +18,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     data = torch.tensor(get_hdf5(args.dir, args.path, args.rollout))
-    init_nodes = data[50][:int(args.particles)]
+    init_nodes = data[50]
 
     graph = Graph(init_nodes)
     start = time.time()
@@ -54,7 +54,7 @@ if __name__ == '__main__':
     max_x = max([p[0].item() for p in graph.nodes])
     min_y = min([p[1].item() for p in graph.nodes])
     max_y = max([p[1].item() for p in graph.nodes])
-    coord_scale = 25
+    coord_scale = 100
 
     for i, n in enumerate(graph.nodes):
         G.node(

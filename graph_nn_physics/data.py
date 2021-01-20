@@ -45,15 +45,7 @@ class SimulationDataset(Dataset):
         types = torch.tensor(arr).unsqueeze(1).float()
 
         begin = random.randint(rollout.size(0) - self.vel_seq - 1) + 1
-        vels = []
-
-        # for i in reversed(range(0, self.vel_seq)):
-        #     vels.append(rollout[begin - i] - rollout[begin - i - 1])
-
-        for i in range(self.vel_seq):
-            vels.append(rollout[begin + i] - rollout[begin + i - 1])
-
-        vels = torch.stack(vels, dim=1)
+        vels = rollout[begin:begin + self.vel_seq] - rollout[begin - 1: begin + (self.vel_seq - 1)]
 
         attrs = self.file[self.group].attrs
 
@@ -65,11 +57,12 @@ class SimulationDataset(Dataset):
             mean = torch.tensor(attrs['vel_mean'])
             std = torch.tensor(attrs['vel_std'])
             vels = decoder_normalizer(vels, mean, std)
+
             amean = torch.tensor(attrs['acc_mean'])
             astd = torch.tensor(attrs['acc_std'])
             gt = decoder_normalizer(gt, amean, astd)
 
-        pos = rollout[idx - 1]
+        pos = rollout[idx - 2]
         graph = Graph(pos)
         graph.attrs = attrs
 

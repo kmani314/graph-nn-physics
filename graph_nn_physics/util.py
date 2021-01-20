@@ -6,7 +6,9 @@ def graph_preprocessor(graph, vels, types):
     pos = graph.nodes
 
     end_vel = vels
-    squashed = end_vel.view(end_vel.size(0), end_vel.size(1) * end_vel.size(2))
+
+    vels = torch.split(vels, 1)
+    vels = torch.cat(vels, dim=2).squeeze()
 
     radius = attrs['default_connectivity_radius']
 
@@ -17,7 +19,7 @@ def graph_preprocessor(graph, vels, types):
     dist = torch.clamp(dist / radius, -1, 1)
 
     # if using a particle type embedding, move this elsewhere
-    nodes = torch.cat([squashed, dist, types], dim=1).float()
+    nodes = torch.cat([pos, vels, dist, types], dim=1).float()
 
     graph = Graph(pos)
     graph.attrs = attrs
@@ -25,12 +27,12 @@ def graph_preprocessor(graph, vels, types):
     graph.gen_edges(float(radius))
 
     senders = torch.index_select(graph.nodes, 0, graph.senders)
-    senders = torch.narrow(senders, 1, 0, attrs['dim'])
+    # senders = torch.narrow(senders, 1, 0, attrs['dim'])
     receivers = torch.index_select(graph.nodes, 0, graph.receivers)
-    receivers = torch.narrow(receivers, 1, 0, attrs['dim'])
+    # receivers = torch.narrow(receivers, 1, 0, attrs['dim'])
 
     positional = (senders - receivers) / graph.radius
-    norm = torch.norm(positional, dim=1).unsqueeze(1)
+    norm = torch.linalg.norm(positional, dim=1).unsqueeze(1)
     graph.edges = torch.cat([positional, norm], dim=1)
     graph.nodes = nodes
 
