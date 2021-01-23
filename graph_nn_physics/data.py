@@ -62,7 +62,7 @@ class SimulationDataset(Dataset):
             astd = torch.tensor(attrs['acc_std'])
             gt = decoder_normalizer(gt, amean, astd)
 
-        pos = rollout[idx - 2]
+        pos = rollout[idx - 1]
         graph = Graph(pos)
         graph.attrs = attrs
 

@@ -29,7 +29,9 @@ if __name__ == '__main__':
     edges = torch.cat([graph.senders.unsqueeze(1), graph.receivers.unsqueeze(1)], dim=1)
     edge_label_colors = np.random.rand(graph.n_edges, 3)
 
-    edge_labels = {(*edges[i].tolist(),): i for i in range(edges.size(0))}
+    norm = []
+
+    edge_labels = {(*edges[i].tolist(),): norm[i] for i in range(edges.size(0))}
 
     pos = {}
     for i, p in enumerate(graph.nodes.numpy()):

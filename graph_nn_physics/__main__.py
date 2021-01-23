@@ -60,18 +60,20 @@ if __name__ == '__main__':
         output = network(batch[0])
 
         loss = torch.tensor(0, device=device, dtype=torch.float32)
-        differences = []
+
+        norm = []
+        gt_norm = []
 
         for i, gt in enumerate(batch[1]):
             trimmed = torch.narrow(output[i], 0, 0, batch[0][i].n_nodes)
-            differences.append(trimmed - gt)
+
+            norm.append(torch.linalg.norm(trimmed, keepdims=True, dim=1))
+            gt_norm.append(torch.linalg.norm(gt, keepdims=True, dim=1))
+
             loss += criterion(gt.float(), trimmed.float())
 
-        norm_difference = 0
-        with torch.no_grad():
-            norm_difference = torch.mean(
-                torch.tensor([torch.linalg.norm(x) for x in differences])
-            )
+        norm = torch.mean(torch.cat(norm))
+        gt_norm = torch.mean(torch.cat(gt_norm))
 
         loss = torch.div(loss, params['batch_size'])
 
@@ -81,9 +83,8 @@ if __name__ == '__main__':
         if (epoch + 1) % params['decay_interval'] == 0:
             decay.step()
 
-        # writer.add_scalar('Acceleration norm', norm, epoch)
-        # writer.add_scalar('Ground truth norm', gt_norm, epoch)
-        writer.add_scalar('Relative', norm_difference, epoch)
+        writer.add_scalar('Acceleration norm', norm, epoch)
+        writer.add_scalar('Ground truth norm', gt_norm, epoch)
         writer.add_scalar('MSELoss', loss, epoch)
         writer.add_scalar('ExponentialLR', decay.get_last_lr()[0], epoch)
 

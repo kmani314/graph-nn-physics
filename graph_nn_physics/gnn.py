@@ -125,15 +125,13 @@ class GraphNetwork(nn.Module):
         # construct tensor of [e_k, v_r_k, v_s_k, u] for each edge for each graph in batch
         batched_tensor_tuple = []
         for graph in graph_batch:
-            ee = graph.edges
-            ve = graph.nodes
-            senders = torch.index_select(ve, 0, graph.senders)
+            senders = torch.index_select(graph.nodes, 0, graph.senders)
             senders = self._pad_items([senders], batch_em)[0]
-            receivers = torch.index_select(ve, 0, graph.receivers)
+            receivers = torch.index_select(graph.nodes, 0, graph.receivers)
             receivers = self._pad_items([receivers], batch_em)[0]
 
             global_tensor = self._repeat_global_tensor(graph.globals, graph.n_edges, batch_em)
-            batched_tensor_tuple.append(torch.cat([ee, senders, receivers, global_tensor], dim=1))
+            batched_tensor_tuple.append(torch.cat([graph.edges, senders, receivers, global_tensor], dim=1))
 
         batched_tensor_tuple = torch.stack(batched_tensor_tuple)
 
@@ -154,9 +152,8 @@ class GraphNetwork(nn.Module):
             # sum receivers for every node
             receivers = graph.receivers.unsqueeze(1).repeat(1, self.ve_dim)
 
-            if graph.edges.size(0) <= graph.n_nodes:
-                masked_edges = self._pad_items([masked_edges], graph.n_nodes)[0]
-                receivers = self._pad_items([receivers], graph.n_nodes)[0]
+            masked_edges = self._pad_items([masked_edges], graph.n_nodes)[0]
+            receivers = self._pad_items([receivers], graph.n_nodes)[0]
 
             zeros = torch.zeros_like(masked_edges)
             scattered_edge_states = zeros.scatter_add(0, receivers, masked_edges)

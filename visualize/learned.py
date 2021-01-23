@@ -75,7 +75,7 @@ if __name__ == '__main__':
             std = torch.tensor(attrs['acc_std'])
 
             trimmed = torch.narrow(output[0], 0, 0, curr_graph.n_nodes)
-            # acc = normalized_to_real(trimmed, mean, std)
+            acc = normalized_to_real(trimmed, mean, std)
             acc = trimmed
 
             # omit delta_t
@@ -93,6 +93,7 @@ if __name__ == '__main__':
             curr_graph.to(device)
             curr_graph = [curr_graph]
             print('Inferred step {}'.format(i))
+            # print(curr_graph[0].edges)
 
     pos = np.stack([x.detach().cpu().numpy() for x in pos])
     fig = plt.figure()
@@ -100,13 +101,13 @@ if __name__ == '__main__':
 
     dim = curr_graph[0].attrs['dim']
 
-    ax.set_xlim3d([0, 0.9])
+    ax.set_xlim3d([-10, 10])
     ax.set_xlabel('X')
 
-    ax.set_ylim3d([0, 0.9])
+    ax.set_ylim3d([-10, 10])
     ax.set_ylabel('Y')
 
-    ax.set_zlim3d([0, 0.9])
+    ax.set_zlim3d([-10, 10])
     ax.set_zlabel('Z')
 
     points = ax.scatter(pos[0][:, 0], 0, pos[0][:, 1])  # , data[0][:, 1], s=1000, alpha=0.8)
