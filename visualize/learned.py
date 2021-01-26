@@ -11,7 +11,6 @@ import numpy as np
 import argparse
 import torch
 
-
 def animation_func(num, data, points, speed, dim):
     points._offsets3d = (data[num * speed][:, 0], 0, data[num * speed][:, 1])  # , data[num][:, 1])
     # points._offsets3d = [data[num * speed][:, i] for i in range(dim)] + [0]
@@ -38,7 +37,7 @@ if __name__ == '__main__':
     )
 
     network = GraphNetwork(
-        node_dim=(params['vel_context'] + 3) * params['dim'] + 1,
+        node_dim=(params['vel_context'] + 2) * params['dim'] + 1,
         edge_dim=params['dim'] + 1,
         global_dim=1,
         mp_steps=params['mp_steps'],
@@ -71,17 +70,24 @@ if __name__ == '__main__':
             curr_graph.to('cpu')
             output = output.to(device='cpu')
             attrs = curr_graph.attrs
-            mean = torch.tensor(attrs['acc_mean'])
-            std = torch.tensor(attrs['acc_std'])
+            mean = torch.tensor(attrs['vel_mean'])
+            std = torch.tensor(attrs['vel_std'])
+
+            amean = torch.tensor(attrs['vel_mean'])
+            astd = torch.tensor(attrs['vel_std'])
 
             trimmed = torch.narrow(output[0], 0, 0, curr_graph.n_nodes)
-            acc = normalized_to_real(trimmed, mean, std)
+
             acc = trimmed
 
+            # if params['normalization']:
+            #     acc = normalized_to_real(trimmed, mean, std)
+
             # omit delta_t
-            new_vels = curr_graph.vels[-1] + acc
-            new_pos = pos[-1].to(device='cpu') + new_vels
+            new_vels = curr_graph.vels[-1] + normalized_to_real(acc, amean, astd)
+            new_pos = pos[-1].to(device='cpu') + normalized_to_real(new_vels, mean, std)
             types = curr_graph.types
+
             vels = torch.cat([curr_graph.vels[1:], new_vels.unsqueeze(0)])
             pos.append(new_pos)
             new_pos = new_pos.float()
@@ -101,13 +107,13 @@ if __name__ == '__main__':
 
     dim = curr_graph[0].attrs['dim']
 
-    ax.set_xlim3d([-10, 10])
+    ax.set_xlim3d([0, 1])
     ax.set_xlabel('X')
 
-    ax.set_ylim3d([-10, 10])
+    ax.set_ylim3d([0, 1])
     ax.set_ylabel('Y')
 
-    ax.set_zlim3d([-10, 10])
+    ax.set_zlim3d([0, 1])
     ax.set_zlabel('Z')
 
     points = ax.scatter(pos[0][:, 0], 0, pos[0][:, 1])  # , data[0][:, 1], s=1000, alpha=0.8)

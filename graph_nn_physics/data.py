@@ -1,7 +1,7 @@
-from torch.utils.data import Dataset
-from numpy import random
-from .graph import Graph
 from .util import graph_preprocessor, decoder_normalizer
+from torch.utils.data import Dataset
+from .noise import gen_noise
+from .graph import Graph
 import numpy as np
 import torch
 import h5py
@@ -15,28 +15,32 @@ def collate_fn(batch, device):
 
     return (graphs, gt)
 
+def combine_std(a, b):
+    return (a ** 2 + b ** 2) ** 0.5
+
 class SimulationDataset(Dataset):
-    def __init__(self, file, group, vel_seq, normalization=True):
+    def __init__(self, file, group, vel_seq, noise_std, normalization=True):
         self.file = h5py.File(file, 'r')
         self.group = group
+        self.noise_std = noise_std
         self.rollouts = len(self.file[self.group]['positions'].keys())
         self.vel_seq = vel_seq
         self.normalization = normalization
 
     def __len__(self):
-        sum = 0
-        for i in range(0, self.rollouts):
-            positions = self.file[self.group]['positions'].get(str(i))
-            sum += positions.shape[0]
-        return sum
+        # return self.rollouts * (self.file[self.group]['positions'].get('0').shape[0] - self.vel_seq)
+        return 10000
 
-    def __getitem__(self, _):
-        num = random.randint(self.rollouts)
+    def __getitem__(self, idx):
+        dataset = self.file[self.group]
 
-        positions = self.file[self.group]['positions'].get(str(num))
-        particle_types = self.file[self.group]['particle_types'].get(str(num))
+        num = str(idx // (dataset['positions'].get('0').shape[0] - self.vel_seq))
+        begin = idx % (dataset['positions'].get('0').shape[0] - self.vel_seq - 2) + 1
 
-        arr = np.zeros(positions.shape, dtype='float')
+        positions = dataset['positions'].get(num)
+        particle_types = dataset['particle_types'].get(num)
+
+        arr = np.zeros(positions.shape, dtype='double')
         positions.read_direct(arr)
         rollout = torch.tensor(arr).float()
 
@@ -44,25 +48,38 @@ class SimulationDataset(Dataset):
         particle_types.read_direct(arr)
         types = torch.tensor(arr).unsqueeze(1).float()
 
-        begin = random.randint(rollout.size(0) - self.vel_seq - 1) + 1
-        vels = rollout[begin:begin + self.vel_seq] - rollout[begin - 1: begin + (self.vel_seq - 1)]
+        subseq = rollout[begin - 1:begin + self.vel_seq]
+        noise = gen_noise(subseq, self.noise_std)
+
+        vels = subseq[1:] - subseq[:-1]
+
+        # get next acceleration as next vel - last vel given to network
+        t_idx = begin + self.vel_seq
+        next_vel = (rollout[t_idx] + noise[-1]) - subseq[-1]
+
+        gt = next_vel - vels[-1]
 
         attrs = self.file[self.group].attrs
 
-        # get next acceleration as next vel - last vel given to network
-        idx = begin + self.vel_seq
-        gt = rollout[idx] - 2 * rollout[idx - 1] + rollout[idx - 2]
-
         if self.normalization:
-            mean = torch.tensor(attrs['vel_mean'])
-            std = torch.tensor(attrs['vel_std'])
-            vels = decoder_normalizer(vels, mean, std)
+            vel_std = combine_std(attrs['vel_std'], self.noise_std)
+            acc_std = combine_std(attrs['acc_std'], self.noise_std)
+
+            mean = torch.tensor(attrs['vel_mean']).float()
+            std = torch.tensor(vel_std).float()
+            print(std.dtype)
+            vels = decoder_normalizer(vels.float(), mean, std)
+            print(vels)
 
             amean = torch.tensor(attrs['acc_mean'])
-            astd = torch.tensor(attrs['acc_std'])
+            astd = torch.tensor(acc_std)
             gt = decoder_normalizer(gt, amean, astd)
 
-        pos = rollout[idx - 1]
+        # print(torch.mean(torch.linalg.norm(gt, dim=1)))
+        # print(vels)
+
+        pos = subseq[-1]
+
         graph = Graph(pos)
         graph.attrs = attrs
 

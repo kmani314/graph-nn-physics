@@ -1,7 +1,6 @@
 from torch.utils.tensorboard import SummaryWriter
 from .data import SimulationDataset, collate_fn
 from torch.utils.data import DataLoader
-from .util import decoder_normalizer
 from .hyperparams import params
 from .gnn import GraphNetwork
 from os.path import join
@@ -33,12 +32,13 @@ if __name__ == '__main__':
 
     network.to(device=device)
 
-    dataset = SimulationDataset(args.dataset, args.group, params['vel_context'], normalization=params['normalization'])
+    dataset = SimulationDataset(args.dataset, args.group, params['vel_context'], params['noise_std'], normalization=params['normalization'])
 
+    torch.set_printoptions(precision=12)
     loader = DataLoader(
         dataset,
         batch_size=params['batch_size'],
-        shuffle=True,
+        shuffle=False,
         collate_fn=lambda x: collate_fn(x, device)
     )
 

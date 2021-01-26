@@ -1,4 +1,3 @@
-from .graph import Graph
 import torch
 
 def graph_preprocessor(graph, vels, types):
@@ -19,12 +18,11 @@ def graph_preprocessor(graph, vels, types):
 
     dist = torch.cat([pos - lower, upper - pos], dim=1)
 
-    dist = torch.clamp(dist / radius, -1, 1)
+    # dist = torch.clamp(dist / radius, -1, 1)
 
     # if using a particle type embedding, move this elsewhere
-    nodes = torch.cat([pos, vels, dist, types], dim=1).float()
+    nodes = torch.cat([vels, dist, types], dim=1).float()
 
-    graph = Graph(pos)
     graph.attrs = attrs
     graph.types = types
     graph.gen_edges(float(radius))
@@ -32,7 +30,8 @@ def graph_preprocessor(graph, vels, types):
     senders = torch.index_select(pos, 0, graph.senders)
     receivers = torch.index_select(pos, 0, graph.receivers)
 
-    positional = (senders - receivers) / graph.radius
+    # positional = (senders - receivers) / graph.radius
+    positional = (senders - receivers)
 
     norm = torch.linalg.norm(positional, dim=1, keepdims=True)
 
@@ -40,10 +39,13 @@ def graph_preprocessor(graph, vels, types):
     graph.nodes = nodes
 
     # not used for training, instead for inference
+    norm = torch.linalg.norm(vels)
+
     graph.pos = pos
     graph.vels = end_vel
     # graph.dist = dist
     graph.norm = norm
+    graph.vel_avg = torch.mean(vels)
 
     return graph
 

@@ -22,7 +22,7 @@ class Graph():
         self.tree = KDTree(self.nodes)
 
         edges = self.tree.query_pairs(radius, output_type='ndarray')
-        # edges = np.concatenate((edges, np.flip(edges, 1)))
+        edges = np.concatenate((edges, np.flip(edges, 1)))
 
         self.receivers = torch.tensor(edges[:, 0], dtype=torch.int64)
         self.senders = torch.tensor(edges[:, 1], dtype=torch.int64)
