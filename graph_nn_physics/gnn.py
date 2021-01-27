@@ -26,7 +26,7 @@ class GraphNetwork(nn.Module):
             node_dim + global_dim, encoder_hidden_dim, encoder_hidden, ve_dim, batch_norm=True)
 
         self._edge_encoder = self._construct_mlp(
-            edge_dim, encoder_hidden_dim, encoder_hidden, ee_dim)
+            edge_dim, encoder_hidden_dim, encoder_hidden, ee_dim, batch_norm=True)
 
         # phi_e/phi_v, process edges and nodes into intermediate latent states
         self._edge_processors = []
@@ -98,8 +98,11 @@ class GraphNetwork(nn.Module):
             global_tensor = global_tensor.unsqueeze(1)
             i.nodes = torch.cat([i.nodes, global_tensor], dim=1)
 
-        padded_nodes = self._pad_items([x.nodes for x in graph_batch], batch_nm)
-        padded_edges = self._pad_items([x.edges for x in graph_batch], batch_em)
+        # padded_nodes = self._pad_items([x.nodes for x in graph_batch], batch_nm)
+        # padded_edges = self._pad_items([x.edges for x in graph_batch], batch_em)
+
+        padded_nodes = [x.nodes for x in graph_batch]
+        padded_edges = [x.edges for x in graph_batch]
 
         batched_nodes = torch.stack(padded_nodes)
         batched_edges = torch.stack(padded_edges)
@@ -133,13 +136,9 @@ class GraphNetwork(nn.Module):
             # print(graph.receivers)
 
             senders = torch.index_select(graph.nodes, 0, graph.senders)
-            senders = self._pad_items([senders], batch_em)[0]
-            # print('selected senders')
-            # print(senders)
+            # senders = self._pad_items([senders], batch_em)[0]
             receivers = torch.index_select(graph.nodes, 0, graph.receivers)
-            # print('selected receivers')
-            # print(receivers)
-            receivers = self._pad_items([receivers], batch_em)[0]
+            # receivers = self._pad_items([receivers], batch_em)[0]
 
             global_tensor = self._repeat_global_tensor(graph.globals, graph.n_edges, batch_em)
             batched_tensor_tuple.append(torch.cat([graph.edges, senders, receivers, global_tensor], dim=1))
@@ -177,7 +176,7 @@ class GraphNetwork(nn.Module):
             # print(scattered_edge_states)
 
             # this should only be necessary if there are isolated nodes with no receiver edges
-            scattered_edge_states = self._pad_items([scattered_edge_states], batch_nm)[0]
+            # scattered_edge_states = self._pad_items([scattered_edge_states], batch_nm)[0]
             global_tensor = self._repeat_global_tensor(graph.globals, graph.n_edges, batch_nm)
             phi_v_input = torch.cat([graph.nodes, scattered_edge_states, global_tensor], dim=1)
             node_update_batch.append(phi_v_input)

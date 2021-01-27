@@ -18,7 +18,7 @@ if __name__ == '__main__':
     device = torch.device(params['device'])
 
     network = GraphNetwork(
-        node_dim=(params['vel_context'] + 3) * params['dim'] + 1,
+        node_dim=(params['vel_context'] + 2) * params['dim'] + 1,
         edge_dim=params['dim'] + 1,
         global_dim=1,
         mp_steps=params['mp_steps'],
@@ -38,7 +38,7 @@ if __name__ == '__main__':
     loader = DataLoader(
         dataset,
         batch_size=params['batch_size'],
-        shuffle=False,
+        shuffle=True,
         collate_fn=lambda x: collate_fn(x, device)
     )
 
@@ -75,7 +75,7 @@ if __name__ == '__main__':
         norm = torch.mean(torch.cat(norm))
         gt_norm = torch.mean(torch.cat(gt_norm))
 
-        loss = torch.div(loss, params['batch_size'])
+        loss /= params['batch_size']
 
         loss.backward()
         optimizer.step()
@@ -83,9 +83,9 @@ if __name__ == '__main__':
         if (epoch + 1) % params['decay_interval'] == 0:
             decay.step()
 
-        writer.add_scalar('Acceleration norm', norm, epoch)
-        writer.add_scalar('Ground truth norm', gt_norm, epoch)
-        writer.add_scalar('MSELoss', loss, epoch)
-        writer.add_scalar('ExponentialLR', decay.get_last_lr()[0], epoch)
+        writer.add_scalar('stats/predicted', norm, epoch)
+        writer.add_scalar('stats/gt', gt_norm, epoch)
+        writer.add_scalar('loss', loss, epoch)
+        writer.add_scalar('stats/learning rate', decay.get_last_lr()[0], epoch)
 
         del loss, output

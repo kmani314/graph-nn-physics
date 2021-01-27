@@ -3,8 +3,6 @@ import torch
 def graph_preprocessor(graph, vels, types):
     attrs = graph.attrs
     pos = graph.nodes
-
-    end_vel = vels
     types = torch.zeros_like(types)
 
     vels = torch.split(vels, 1)
@@ -17,8 +15,7 @@ def graph_preprocessor(graph, vels, types):
     upper = bounds[:, 1]
 
     dist = torch.cat([pos - lower, upper - pos], dim=1)
-
-    # dist = torch.clamp(dist / radius, -1, 1)
+    dist = torch.clamp(dist / radius, -1., 1.)
 
     # if using a particle type embedding, move this elsewhere
     nodes = torch.cat([vels, dist, types], dim=1).float()
@@ -30,23 +27,12 @@ def graph_preprocessor(graph, vels, types):
     senders = torch.index_select(pos, 0, graph.senders)
     receivers = torch.index_select(pos, 0, graph.receivers)
 
-    # positional = (senders - receivers) / graph.radius
-    positional = (senders - receivers)
+    positional = (senders - receivers) / graph.radius
 
     norm = torch.linalg.norm(positional, dim=1, keepdims=True)
 
     graph.edges = torch.cat([positional, norm], dim=1)
     graph.nodes = nodes
-
-    # not used for training, instead for inference
-    norm = torch.linalg.norm(vels)
-
-    graph.pos = pos
-    graph.vels = end_vel
-    # graph.dist = dist
-    graph.norm = norm
-    graph.vel_avg = torch.mean(vels)
-
     return graph
 
 def decoder_normalizer(acc, mean, std):

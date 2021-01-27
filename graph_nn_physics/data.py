@@ -29,7 +29,7 @@ class SimulationDataset(Dataset):
 
     def __len__(self):
         # return self.rollouts * (self.file[self.group]['positions'].get('0').shape[0] - self.vel_seq)
-        return 10000
+        return 2048
 
     def __getitem__(self, idx):
         dataset = self.file[self.group]
@@ -44,12 +44,13 @@ class SimulationDataset(Dataset):
         positions.read_direct(arr)
         rollout = torch.tensor(arr).float()
 
-        arr = np.zeros(particle_types.shape, dtype='float')
+        arr = np.zeros(particle_types.shape, dtype='double')
         particle_types.read_direct(arr)
         types = torch.tensor(arr).unsqueeze(1).float()
 
         subseq = rollout[begin - 1:begin + self.vel_seq]
         noise = gen_noise(subseq, self.noise_std)
+        subseq += noise
 
         vels = subseq[1:] - subseq[:-1]
 
@@ -65,24 +66,15 @@ class SimulationDataset(Dataset):
             vel_std = combine_std(attrs['vel_std'], self.noise_std)
             acc_std = combine_std(attrs['acc_std'], self.noise_std)
 
-            mean = torch.tensor(attrs['vel_mean']).float()
-            std = torch.tensor(vel_std).float()
-            print(std.dtype)
-            vels = decoder_normalizer(vels.float(), mean, std)
-            print(vels)
-
-            amean = torch.tensor(attrs['acc_mean'])
-            astd = torch.tensor(acc_std)
-            gt = decoder_normalizer(gt, amean, astd)
-
-        # print(torch.mean(torch.linalg.norm(gt, dim=1)))
-        # print(vels)
+            vels = decoder_normalizer(vels, attrs['vel_mean'], vel_std)
+            gt = decoder_normalizer(gt, attrs['vel_mean'], acc_std)
 
         pos = subseq[-1]
 
         graph = Graph(pos)
         graph.attrs = attrs
 
+        # print(idx)
         graph = graph_preprocessor(graph, vels, types)
 
         return [graph, gt]
