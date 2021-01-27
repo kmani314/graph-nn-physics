@@ -29,7 +29,7 @@ class SimulationDataset(Dataset):
 
     def __len__(self):
         # return self.rollouts * (self.file[self.group]['positions'].get('0').shape[0] - self.vel_seq)
-        return 2048
+        return 10000
 
     def __getitem__(self, idx):
         dataset = self.file[self.group]
