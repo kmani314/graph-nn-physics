@@ -13,12 +13,13 @@ if __name__ == '__main__':
     parser.add_argument('dataset')
     parser.add_argument('group')
     parser.add_argument('save_dir')
+    parser.add_argument('--run_name')
     args = parser.parse_args()
 
     device = torch.device(params['device'])
 
     network = GraphNetwork(
-        node_dim=(params['vel_context'] + 2) * params['dim'] + 1,
+        node_dim=(params['vel_context'] + 1) * params['dim'] + 1,
         edge_dim=params['dim'] + 1,
         global_dim=1,
         mp_steps=params['mp_steps'],
@@ -38,21 +39,25 @@ if __name__ == '__main__':
     loader = DataLoader(
         dataset,
         batch_size=params['batch_size'],
-        shuffle=True,
+        shuffle=params['shuffle'],
         collate_fn=lambda x: collate_fn(x, device)
     )
 
-    writer = SummaryWriter()
     optimizer = torch.optim.Adam(network.parameters(), lr=params['lr'])
     decay = torch.optim.lr_scheduler.ExponentialLR(optimizer, params['gamma'])
     criterion = torch.nn.MSELoss()
+
+    logging = args.run_name is not None
+
+    if logging:
+        writer = SummaryWriter(join('runs', args.run_name))
 
     for epoch, batch in enumerate(tqdm(loader, total=params['epochs'])):
         if epoch >= params['epochs']:
             break
 
         if (epoch + 1) % params['model_save_interval'] == 0:
-            torch.save(network.cpu().state_dict(), join(args.save_dir, '{}.pt'.format(epoch + 1)))
+            torch.save(network.cpu().state_dict(), join(args.save_dir, f'{args.run_name}-{epoch + 1}.pt'))
             network.to(device=device)
 
         optimizer.zero_grad()
@@ -69,6 +74,7 @@ if __name__ == '__main__':
 
             norm.append(torch.linalg.norm(trimmed, keepdims=True, dim=1))
             gt_norm.append(torch.linalg.norm(gt, keepdims=True, dim=1))
+            # print(gt.float())
 
             loss += criterion(gt.float(), trimmed.float())
 
@@ -83,9 +89,10 @@ if __name__ == '__main__':
         if (epoch + 1) % params['decay_interval'] == 0:
             decay.step()
 
-        writer.add_scalar('stats/predicted', norm, epoch)
-        writer.add_scalar('stats/gt', gt_norm, epoch)
-        writer.add_scalar('loss', loss, epoch)
-        writer.add_scalar('stats/learning rate', decay.get_last_lr()[0], epoch)
+        if logging:
+            writer.add_scalar('stats/predicted', norm, epoch)
+            writer.add_scalar('stats/gt', gt_norm, epoch)
+            writer.add_scalar('loss', loss, epoch)
+            writer.add_scalar('stats/learning rate', decay.get_last_lr()[0], epoch)
 
         del loss, output

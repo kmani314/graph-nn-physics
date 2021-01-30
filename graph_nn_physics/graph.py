@@ -2,6 +2,7 @@ from sklearn.neighbors import KDTree
 import numpy as np
 import torch
 
+
 class Graph():
     def __init__(self, nodes):
         self.nodes = nodes

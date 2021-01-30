@@ -27,7 +27,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     device = torch.device(params['device'])
-    dataset = SimulationDataset(args.dataset, args.group, params['vel_context'], normalization=params['normalization'])
+    dataset = SimulationDataset(args.dataset, args.group, params['vel_context'], 0, normalization=params['normalization'])
 
     loader = DataLoader(
         dataset,

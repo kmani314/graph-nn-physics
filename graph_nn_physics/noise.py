@@ -12,4 +12,5 @@ def gen_noise(pos, noise_std):
     # random walk over velocities
     noise = torch.cumsum(noise, dim=0)
     noise = torch.cat([torch.zeros_like(noise[:1]), torch.cumsum(noise, dim=0)], dim=0)
+    print(noise)
     return noise

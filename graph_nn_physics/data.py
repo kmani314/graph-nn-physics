@@ -35,20 +35,23 @@ class SimulationDataset(Dataset):
         dataset = self.file[self.group]
 
         num = str(idx // (dataset['positions'].get('0').shape[0] - self.vel_seq))
-        begin = idx % (dataset['positions'].get('0').shape[0] - self.vel_seq - 2) + 1
+        begin = idx % (dataset['positions'].get('0').shape[0] - self.vel_seq - 2)
 
         positions = dataset['positions'].get(num)
         particle_types = dataset['particle_types'].get(num)
 
         arr = np.zeros(positions.shape, dtype='double')
         positions.read_direct(arr)
+        # rollout = torch.tensor(arr).float()[:, :25]
         rollout = torch.tensor(arr).float()
 
         arr = np.zeros(particle_types.shape, dtype='double')
         particle_types.read_direct(arr)
+        # types = torch.tensor(arr).unsqueeze(1).float()[:25]
         types = torch.tensor(arr).unsqueeze(1).float()
 
-        subseq = rollout[begin - 1:begin + self.vel_seq]
+        subseq = rollout[begin: begin + self.vel_seq]
+        # print(subseq)
         noise = gen_noise(subseq, self.noise_std)
         subseq += noise
 
@@ -59,22 +62,31 @@ class SimulationDataset(Dataset):
         next_vel = (rollout[t_idx] + noise[-1]) - subseq[-1]
 
         gt = next_vel - vels[-1]
+        # print(f'Before norm: {gt}')
 
         attrs = self.file[self.group].attrs
 
         if self.normalization:
-            vel_std = combine_std(attrs['vel_std'], self.noise_std)
-            acc_std = combine_std(attrs['acc_std'], self.noise_std)
+            vel_std = torch.tensor(combine_std(attrs['vel_std'], self.noise_std))
+            acc_std = torch.tensor(combine_std(attrs['acc_std'], self.noise_std))
 
-            vels = decoder_normalizer(vels, attrs['vel_mean'], vel_std)
-            gt = decoder_normalizer(gt, attrs['vel_mean'], acc_std)
+            vmean = torch.tensor(attrs['vel_mean'])
+            amean = torch.tensor(attrs['acc_mean'])
+            # print(vmean)
+            # print(amean)
+            # print(acc_std)
 
+            vels = decoder_normalizer(vels, vmean, vel_std)
+            gt = decoder_normalizer(gt, amean, acc_std)
+
+        # print(f'After norm: {gt}')
+        # print(gt)
         pos = subseq[-1]
+        # print(pos)
 
         graph = Graph(pos)
         graph.attrs = attrs
 
-        # print(idx)
         graph = graph_preprocessor(graph, vels, types)
 
         return [graph, gt]

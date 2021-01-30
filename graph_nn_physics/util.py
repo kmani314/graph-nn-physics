@@ -4,6 +4,7 @@ def graph_preprocessor(graph, vels, types):
     attrs = graph.attrs
     pos = graph.nodes
     types = torch.zeros_like(types)
+    end_vel = vels
 
     vels = torch.split(vels, 1)
     vels = torch.cat(vels, dim=2).squeeze()
@@ -33,6 +34,9 @@ def graph_preprocessor(graph, vels, types):
 
     graph.edges = torch.cat([positional, norm], dim=1)
     graph.nodes = nodes
+
+    graph.pos = pos
+    graph.vels = end_vel
     return graph
 
 def decoder_normalizer(acc, mean, std):

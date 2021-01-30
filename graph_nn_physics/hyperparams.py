@@ -11,8 +11,10 @@ params = dict(
     decoder_hidden_dim=128,
     normalization=True,
     noise_std=6.7e-4,
-    vel_context=5,
+    # noise_std=0,
+    vel_context=6,
     batch_size=2,
     model_save_interval=500,
-    decay_interval=5 * 10e3
+    decay_interval=5 * 10e3,
+    shuffle=True,
 )
