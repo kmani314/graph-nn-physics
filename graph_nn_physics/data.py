@@ -13,7 +13,7 @@ def collate_fn(batch, device):
 
     gt = [x[1].to(device=device) for x in batch]
 
-    return (graphs, gt)
+    return (graph, gt)
 
 def combine_std(a, b):
     return (a ** 2 + b ** 2) ** 0.5
@@ -53,17 +53,18 @@ class SimulationDataset(Dataset):
         subseq = rollout[begin: begin + self.vel_seq]
         # print(subseq)
         noise = gen_noise(subseq, self.noise_std)
+        # print(noise)
         subseq += noise
-
+        # print(subseq[0])
         vels = subseq[1:] - subseq[:-1]
 
-        # get next acceleration as next vel - last vel given to network
+        previous_vel = subseq[-1] - subseq[-2]
+
         t_idx = begin + self.vel_seq
         next_vel = (rollout[t_idx] + noise[-1]) - subseq[-1]
 
-        gt = next_vel - vels[-1]
-        # print(f'Before norm: {gt}')
-
+        gt = next_vel - previous_vel
+        # print(gt)
         attrs = self.file[self.group].attrs
 
         if self.normalization:
@@ -72,15 +73,11 @@ class SimulationDataset(Dataset):
 
             vmean = torch.tensor(attrs['vel_mean'])
             amean = torch.tensor(attrs['acc_mean'])
-            # print(vmean)
-            # print(amean)
-            # print(acc_std)
 
             vels = decoder_normalizer(vels, vmean, vel_std)
             gt = decoder_normalizer(gt, amean, acc_std)
 
         # print(f'After norm: {gt}')
-        # print(gt)
         pos = subseq[-1]
         # print(pos)
 

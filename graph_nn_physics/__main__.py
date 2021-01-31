@@ -35,7 +35,7 @@ if __name__ == '__main__':
 
     dataset = SimulationDataset(args.dataset, args.group, params['vel_context'], params['noise_std'], normalization=params['normalization'])
 
-    torch.set_printoptions(precision=12)
+    torch.set_printoptions(precision=12, threshold=64000)
     loader = DataLoader(
         dataset,
         batch_size=params['batch_size'],
