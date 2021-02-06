@@ -1,7 +1,7 @@
 params = dict(
-    device='cpu',
-    # epochs=10e4,
-    epochs=0,
+    device='cuda',
+    epochs=10e4,
+    # epochs=1,
     lr=1e-4,
     gamma=0.1,
     mp_steps=10,
@@ -17,5 +17,5 @@ params = dict(
     batch_size=2,
     model_save_interval=500,
     decay_interval=5 * 10e3,
-    shuffle=False,
+    shuffle=True,
 )

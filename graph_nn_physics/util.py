@@ -6,8 +6,9 @@ def graph_preprocessor(graph, vels, types):
     types = torch.zeros_like(types)
     end_vel = vels
 
-    vels = torch.split(vels, 1)
-    vels = torch.cat(vels, dim=2).squeeze()
+    vels = vels.reshape(vels.shape[0], -1)
+    # vels = 
+    # print(vels)
 
     radius = attrs['default_connectivity_radius']
 
@@ -33,6 +34,8 @@ def graph_preprocessor(graph, vels, types):
     norm = torch.linalg.norm(positional, dim=1, keepdims=True)
 
     graph.edges = torch.cat([positional, norm], dim=1)
+    # print(graph.edges)
+    # print(nodes)
     graph.nodes = nodes
 
     graph.pos = pos

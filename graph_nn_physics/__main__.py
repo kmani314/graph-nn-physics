@@ -3,6 +3,7 @@ from .data import SimulationDataset, collate_fn
 from torch.utils.data import DataLoader
 from .hyperparams import params
 from .gnn import GraphNetwork
+from torchviz import make_dot
 from os.path import join
 from tqdm import tqdm
 import argparse
@@ -14,6 +15,7 @@ if __name__ == '__main__':
     parser.add_argument('group')
     parser.add_argument('save_dir')
     parser.add_argument('--run_name')
+    parser.add_argument('--save_graph')
     args = parser.parse_args()
 
     device = torch.device(params['device'])
@@ -64,24 +66,15 @@ if __name__ == '__main__':
 
         output = network(batch[0])
 
-        loss = torch.tensor(0, device=device, dtype=torch.float32)
+        if args.save_graph is not None:
+            make_dot(output, params=dict(network.named_parameters())).render(args.save_graph)
+            args.save_graph = None
 
-        norm = []
-        gt_norm = []
+        gt = batch[1]
+        loss = criterion(output, gt)
 
-        for i, gt in enumerate(batch[1]):
-            trimmed = torch.narrow(output[i], 0, 0, batch[0][i].n_nodes)
-
-            norm.append(torch.linalg.norm(trimmed, keepdims=True, dim=1))
-            gt_norm.append(torch.linalg.norm(gt, keepdims=True, dim=1))
-            # print(gt.float())
-
-            loss += criterion(gt.float(), trimmed.float())
-
-        norm = torch.mean(torch.cat(norm))
-        gt_norm = torch.mean(torch.cat(gt_norm))
-
-        loss /= params['batch_size']
+        norm = torch.mean(torch.linalg.norm(output, keepdims=True, dim=1))
+        gt_norm = torch.mean(torch.linalg.norm(gt, keepdims=True, dim=1))
 
         loss.backward()
         optimizer.step()

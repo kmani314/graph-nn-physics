@@ -7,11 +7,33 @@ import torch
 import h5py
 
 def collate_fn(batch, device):
-    graphs = [x[0] for x in batch]
-    for i in graphs:
-        i.to(device)
+    lengths = torch.tensor([x[0].n_nodes for x in batch])
+    lengths = torch.cat([torch.tensor([0]), lengths[:-1]], dim=0)
+    offsets = torch.cumsum(lengths, dim=0)
+
+    nodes = []
+    edges = []
+    senders = []
+    receivers = []
+
+    for i, pair in enumerate(batch):
+        graph = pair[0]
+        nodes.append(graph.nodes)
+        edges.append(graph.edges)
+        senders.append(graph.senders + offsets[i])
+        receivers.append(graph.receivers + offsets[i])
+
+    graph = Graph(torch.cat(nodes, dim=0))
+    graph.edges = torch.cat(edges, dim=0)
+    graph.senders = torch.cat(senders, dim=0)
+    # print(graph.n_nodes)
+    # print(graph.senders)
+    graph.receivers = torch.cat(receivers, dim=0)
+
+    graph.to(device=device)
 
     gt = [x[1].to(device=device) for x in batch]
+    gt = torch.cat(gt, dim=0)
 
     return (graph, gt)
 
@@ -42,20 +64,15 @@ class SimulationDataset(Dataset):
 
         arr = np.zeros(positions.shape, dtype='double')
         positions.read_direct(arr)
-        # rollout = torch.tensor(arr).float()[:, :25]
         rollout = torch.tensor(arr).float()
 
         arr = np.zeros(particle_types.shape, dtype='double')
         particle_types.read_direct(arr)
-        # types = torch.tensor(arr).unsqueeze(1).float()[:25]
         types = torch.tensor(arr).unsqueeze(1).float()
 
         subseq = rollout[begin: begin + self.vel_seq]
-        # print(subseq)
         noise = gen_noise(subseq, self.noise_std)
-        # print(noise)
         subseq += noise
-        # print(subseq[0])
         vels = subseq[1:] - subseq[:-1]
 
         previous_vel = subseq[-1] - subseq[-2]
@@ -63,9 +80,11 @@ class SimulationDataset(Dataset):
         t_idx = begin + self.vel_seq
         next_vel = (rollout[t_idx] + noise[-1]) - subseq[-1]
 
+        # print(vels)
         gt = next_vel - previous_vel
-        # print(gt)
         attrs = self.file[self.group].attrs
+
+        vels = vels.permute(1, 0, 2)
 
         if self.normalization:
             vel_std = torch.tensor(combine_std(attrs['vel_std'], self.noise_std))
@@ -75,15 +94,15 @@ class SimulationDataset(Dataset):
             amean = torch.tensor(attrs['acc_mean'])
 
             vels = decoder_normalizer(vels, vmean, vel_std)
+            # print(vels)
             gt = decoder_normalizer(gt, amean, acc_std)
+            # print(gt)
 
-        # print(f'After norm: {gt}')
         pos = subseq[-1]
-        # print(pos)
 
         graph = Graph(pos)
         graph.attrs = attrs
 
         graph = graph_preprocessor(graph, vels, types)
 
-        return [graph, gt]
+        return [graph, gt.float()]
