@@ -21,7 +21,7 @@ def get_hdf5(file, path, num):
 def animation_func(num, data, points):
     print(data[num])
     print(np.linalg.norm(data[num]))
-    points._offsets3d = (data[num][:, 0], 0, data[num][:, 1])  # , data[num][:, 1])
+    points._offsets3d = (data[num][:, 0], data[num][:, 1], data[num][:, 2])  # , data[num][:, 1])
     return points
 
 
@@ -47,6 +47,6 @@ if __name__ == '__main__':
     ax.set_zlim3d([0, 0.9])
     ax.set_zlabel('Z')
 
-    points = ax.scatter(data[0][:, 0], 0, data[0][:, 1])  # , data[0][:, 1], s=1000, alpha=0.8)
-    anim = animation.FuncAnimation(fig, animation_func, int(data.shape[0]), fargs=(data, points), interval=250)
+    points = ax.scatter(data[0][:, 0], data[0][:, 1], data[0][:, 2])  # , data[0][:, 1], s=1000, alpha=0.8)
+    anim = animation.FuncAnimation(fig, animation_func, int(data.shape[0]), fargs=(data, points), interval=1)
     plt.show()

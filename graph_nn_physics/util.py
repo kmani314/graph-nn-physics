@@ -1,20 +1,29 @@
 import torch
+from .graph import Graph
 
-def graph_preprocessor(graph, vels, types):
-    attrs = graph.attrs
-    pos = graph.nodes
-    types = torch.zeros_like(types)
-    end_vel = vels
+def combine_std(a, b):
+    return (a ** 2 + b ** 2) ** 0.5
 
+def sequence_postprocessor(subseq, stats):
+    vels = subseq[1:] - subseq[:-1]
+    vels = vels.permute(1, 0, 2)
+    vels = decoder_normalizer(vels, stats['vel_mean'], stats['vel_std'])
     vels = vels.reshape(vels.shape[0], -1)
-    # vels = 
-    # print(vels)
+    return vels
 
-    radius = attrs['default_connectivity_radius']
+def graph_preprocessor(position, stats, types):
+    vels = sequence_postprocessor(position, stats)
 
-    bounds = torch.tensor(attrs['bounds'])
+    types = torch.zeros_like(types)
+
+    radius = stats['default_connectivity_radius']
+
+    bounds = torch.tensor(stats['bounds'])
     lower = bounds[:, 0]
     upper = bounds[:, 1]
+
+    pos = position[-1]
+    graph = Graph(pos)
 
     dist = torch.cat([pos - lower, upper - pos], dim=1)
     dist = torch.clamp(dist / radius, -1., 1.)
@@ -22,7 +31,7 @@ def graph_preprocessor(graph, vels, types):
     # if using a particle type embedding, move this elsewhere
     nodes = torch.cat([vels, dist, types], dim=1).float()
 
-    graph.attrs = attrs
+    graph.attrs = stats
     graph.types = types
     graph.gen_edges(float(radius))
 
@@ -34,12 +43,9 @@ def graph_preprocessor(graph, vels, types):
     norm = torch.linalg.norm(positional, dim=1, keepdims=True)
 
     graph.edges = torch.cat([positional, norm], dim=1)
-    # print(graph.edges)
-    # print(nodes)
     graph.nodes = nodes
+    graph.pos = position
 
-    graph.pos = pos
-    graph.vels = end_vel
     return graph
 
 def decoder_normalizer(acc, mean, std):

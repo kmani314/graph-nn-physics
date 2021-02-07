@@ -1,4 +1,4 @@
-from graph_nn_physics.util import graph_preprocessor, normalized_to_real
+from graph_nn_physics.util import graph_preprocessor, normalized_to_real, sequence_postprocessor
 from graph_nn_physics.data import SimulationDataset, collate_fn
 from graph_nn_physics.hyperparams import params
 from graph_nn_physics.gnn import GraphNetwork
@@ -12,8 +12,7 @@ import argparse
 import torch
 
 def animation_func(num, data, points, speed, dim):
-    points._offsets3d = (data[num * speed][:, 0], 0, data[num * speed][:, 1])  # , data[num][:, 1])
-    # points._offsets3d = [data[num * speed][:, i] for i in range(dim)] + [0]
+    points._offsets3d = (data[num * speed][:, 0], 0, data[num * speed][:, 1])
     return points
 
 
@@ -37,7 +36,7 @@ if __name__ == '__main__':
     )
 
     network = GraphNetwork(
-        node_dim=(params['vel_context'] + 2) * params['dim'] + 1,
+        node_dim=(params['vel_context'] + 1) * params['dim'] + 1,
         edge_dim=params['dim'] + 1,
         global_dim=1,
         mp_steps=params['mp_steps'],
@@ -56,56 +55,44 @@ if __name__ == '__main__':
     sample_state = next(iter(loader))
 
     pos = []
-    pos.append(sample_state[0][0].pos)
+    pos.append(sample_state[0].pos[-1])
     curr_graph = sample_state[0]
-    radius = curr_graph[0].attrs['default_connectivity_radius']
+    radius = curr_graph.attrs['default_connectivity_radius']
 
     criterion = torch.nn.MSELoss()
 
+    torch.set_printoptions(threshold=64000)
     with torch.no_grad():
         for i in range(int(args.steps)):
-            output = network(curr_graph)
+            acc = network(curr_graph).to('cpu')
 
-            curr_graph = curr_graph[0]
             curr_graph.to('cpu')
-            output = output.to(device='cpu')
             attrs = curr_graph.attrs
-            mean = torch.tensor(attrs['vel_mean'])
-            std = torch.tensor(attrs['vel_std'])
 
-            amean = torch.tensor(attrs['vel_mean'])
-            astd = torch.tensor(attrs['vel_std'])
+            amean = torch.tensor(attrs['acc_mean'])
+            astd = torch.tensor(attrs['acc_std'])
+            acc = normalized_to_real(acc, amean, astd)
 
-            trimmed = torch.narrow(output[0], 0, 0, curr_graph.n_nodes)
+            prev_vel = curr_graph.pos[-1] - curr_graph.pos[-2]
+            new_vel = prev_vel + acc
 
-            acc = trimmed
-
-            # if params['normalization']:
-            #     acc = normalized_to_real(trimmed, mean, std)
-
-            # omit delta_t
-            new_vels = curr_graph.vels[-1] + normalized_to_real(acc, amean, astd)
-            new_pos = pos[-1].to(device='cpu') + normalized_to_real(new_vels, mean, std)
-            types = curr_graph.types
-
-            vels = torch.cat([curr_graph.vels[1:], new_vels.unsqueeze(0)])
-            pos.append(new_pos)
+            new_pos = curr_graph.pos[-1] + new_vel
+            seq = torch.cat([curr_graph.pos[1:], new_pos.unsqueeze(0)]).float()
             new_pos = new_pos.float()
+            pos.append(new_pos)
 
-            curr_graph = Graph(new_pos.detach().cpu())
-            curr_graph.attrs = attrs
-            curr_graph = graph_preprocessor(curr_graph, vels, types)
+            curr_graph = graph_preprocessor(seq, attrs, curr_graph.types)
 
             curr_graph.to(device)
-            curr_graph = [curr_graph]
             print('Inferred step {}'.format(i))
-            # print(curr_graph[0].edges)
 
-    pos = np.stack([x.detach().cpu().numpy() for x in pos])
+    # pos = np.stack([x.cpu().numpy() for x in pos])
+    pos = torch.stack(pos).cpu().numpy()
+
     fig = plt.figure()
-    ax = p3.Axes3D(fig)
+    ax = p3.Axes2D(fig)
 
-    dim = curr_graph[0].attrs['dim']
+    dim = curr_graph.attrs['dim']
 
     ax.set_xlim3d([0, 1])
     ax.set_xlabel('X')
@@ -113,8 +100,8 @@ if __name__ == '__main__':
     ax.set_ylim3d([0, 1])
     ax.set_ylabel('Y')
 
-    ax.set_zlim3d([0, 1])
-    ax.set_zlabel('Z')
+    # ax.set_zlim3d([0, 1])
+    # ax.set_zlabel('Z')
 
     points = ax.scatter(pos[0][:, 0], 0, pos[0][:, 1])  # , data[0][:, 1], s=1000, alpha=0.8)
     anim = animation.FuncAnimation(fig, animation_func, int(pos.shape[0] / int(args.speed)), fargs=(pos, points, int(args.speed), dim), interval=1)

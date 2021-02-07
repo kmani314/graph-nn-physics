@@ -1,7 +1,6 @@
 import torch
-import torch.nn as nn
 import torch.nn.functional as F
-# from pytorch_memlab import profile
+import torch.nn as nn
 
 class GraphNetwork(nn.Module):
     def __init__(
@@ -111,23 +110,21 @@ class GraphNetwork(nn.Module):
 
     def _phi_v(self, graph_batch, processor):
         receivers = graph_batch.receivers.unsqueeze(1).repeat(1, self.ve_dim)
-        zeros = torch.zeros_like(graph_batch.edges)
+        zeros = torch.zeros_like(graph_batch.nodes)
+        # zeros = torch.zeros(max(graph_batch.edges.size(0), graph_batch.nodes()))
         scattered_edge_states = zeros.scatter_add(0, receivers, graph_batch.edges)
+
+        # scattered_edge_states = F.pad(scattered_edge_states, (0, 0, 0, graph_batch.n_nodes - scattered_edge_states.size(0)))
         scattered_edge_states = scattered_edge_states[:graph_batch.n_nodes]
 
         # global_tensor = self._repeat_global_tensor(graph_batch.globals, graph_batch.n_nodes, graph_batch.n_nodes)
         graph_batch.nodes = torch.cat([graph_batch.nodes, scattered_edge_states], dim=1)
-
         graph_batch.nodes = processor(graph_batch.nodes)
 
         return graph_batch
 
     def _process(self, latent_graph_tuple):
-        # for np, ep in zip(self._node_processors, self._edge_processors):
-        for _ in range(self.mp_steps):
-            np = self._node_processors[0]
-            ep = self._edge_processors[0]
-
+        for np, ep in zip(self._node_processors, self._edge_processors):
             prev_graph = latent_graph_tuple
 
             latent_graph_tuple = self._phi_e(latent_graph_tuple, ep)
