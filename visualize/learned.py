@@ -1,18 +1,17 @@
-from graph_nn_physics.util import graph_preprocessor, normalized_to_real, sequence_postprocessor
+from graph_nn_physics.util import graph_preprocessor, normalized_to_real
 from graph_nn_physics.data import SimulationDataset, collate_fn
 from graph_nn_physics.hyperparams import params
 from graph_nn_physics.gnn import GraphNetwork
-import mpl_toolkits.mplot3d.axes3d as p3
+from matplotlib.patches import Rectangle
 import matplotlib.animation as animation
-from graph_nn_physics.graph import Graph
 from torch.utils.data import DataLoader
 import matplotlib.pyplot as plt
-import numpy as np
 import argparse
 import torch
+from tqdm import tqdm
 
 def animation_func(num, data, points, speed, dim):
-    points._offsets3d = (data[num * speed][:, 0], 0, data[num * speed][:, 1])
+    points.set_offsets(data[num * speed])
     return points
 
 
@@ -23,6 +22,8 @@ if __name__ == '__main__':
     parser.add_argument('model')
     parser.add_argument('steps')
     parser.add_argument('speed')
+    parser.add_argument('--gif')
+    parser.add_argument('--title')
     args = parser.parse_args()
 
     device = torch.device(params['device'])
@@ -59,11 +60,8 @@ if __name__ == '__main__':
     curr_graph = sample_state[0]
     radius = curr_graph.attrs['default_connectivity_radius']
 
-    criterion = torch.nn.MSELoss()
-
-    torch.set_printoptions(threshold=64000)
     with torch.no_grad():
-        for i in range(int(args.steps)):
+        for i in tqdm(range(int(args.steps))):
             acc = network(curr_graph).to('cpu')
 
             curr_graph.to('cpu')
@@ -84,25 +82,34 @@ if __name__ == '__main__':
             curr_graph = graph_preprocessor(seq, attrs, curr_graph.types)
 
             curr_graph.to(device)
-            print('Inferred step {}'.format(i))
 
-    # pos = np.stack([x.cpu().numpy() for x in pos])
     pos = torch.stack(pos).cpu().numpy()
 
-    fig = plt.figure()
-    ax = p3.Axes2D(fig)
+    fig, ax = plt.subplots()
+    points = ax.scatter(pos[0][:, 0], pos[0][:, 1])
+    plt.axis('scaled')
+
+    if args.title is not None:
+        plt.title(args.title)
+
+    bounds = []
+    axes = []
+    margin = 0.1
+
+    for i in curr_graph.attrs['bounds']:
+        for j in range(len(i)):
+            x = -margin if j % 2 == 0 else margin
+            axes.append(i[j] + x)
+            bounds.append(i[j])
+
+    ax.axis(axes)
+    ax.add_patch(Rectangle((bounds[0], bounds[2]), bounds[1] - bounds[0], bounds[3] - bounds[2], ec='r', fill=False, linewidth=1.5))
 
     dim = curr_graph.attrs['dim']
 
-    ax.set_xlim3d([0, 1])
-    ax.set_xlabel('X')
-
-    ax.set_ylim3d([0, 1])
-    ax.set_ylabel('Y')
-
-    # ax.set_zlim3d([0, 1])
-    # ax.set_zlabel('Z')
-
-    points = ax.scatter(pos[0][:, 0], 0, pos[0][:, 1])  # , data[0][:, 1], s=1000, alpha=0.8)
     anim = animation.FuncAnimation(fig, animation_func, int(pos.shape[0] / int(args.speed)), fargs=(pos, points, int(args.speed), dim), interval=1)
+    if args.gif is not None:
+        print('Saving animation...')
+        fig.set_size_inches(10, 10, True)
+        anim.save(args.gif, writer='ffmpeg', fps=30, dpi=150)
     plt.show()
