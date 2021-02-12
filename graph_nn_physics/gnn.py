@@ -1,5 +1,4 @@
 import torch
-import torch.nn.functional as F
 import torch.nn as nn
 
 class GraphNetwork(nn.Module):
@@ -22,10 +21,10 @@ class GraphNetwork(nn.Module):
 
         # embeds nodes and edges into latent representations
         self._node_encoder = self._construct_mlp(
-            node_dim, encoder_hidden_dim, encoder_hidden, ve_dim, batch_norm=True)
+            node_dim, encoder_hidden_dim, encoder_hidden, ve_dim, layer_norm=False)
 
         self._edge_encoder = self._construct_mlp(
-            edge_dim, encoder_hidden_dim, encoder_hidden, ee_dim, batch_norm=True)
+            edge_dim, encoder_hidden_dim, encoder_hidden, ee_dim, layer_norm=False)
 
         # phi_e/phi_v, process edges and nodes into intermediate latent states
         self._edge_processors = []
@@ -37,14 +36,14 @@ class GraphNetwork(nn.Module):
                 proc_hidden_dim,
                 proc_hidden,
                 ee_dim,
-                batch_norm=True))
+                layer_norm=False))
 
             self._node_processors.append(self._construct_mlp(
                 ee_dim + ve_dim,
                 proc_hidden_dim,
                 proc_hidden,
                 ve_dim,
-                batch_norm=True))
+                layer_norm=False))
 
         # the decoder goes from the latent node dimension to
         # dimensional acceleration to be used in an euler integrator
@@ -54,10 +53,8 @@ class GraphNetwork(nn.Module):
             decoder_hidden,
             dim
         )
-        # print(self._node_encoder)
 
         self._edge_processors = nn.ModuleList(self._edge_processors)
-        # print(self._edge_processors)
         self._node_processors = nn.ModuleList(self._node_processors)
 
         self.mp_steps = mp_steps
@@ -65,7 +62,7 @@ class GraphNetwork(nn.Module):
         self.ve_dim = ve_dim
         self.ee_dim = ee_dim
 
-    def _construct_mlp(self, input, hidden_dim, hidden, output, batch_norm=False):
+    def _construct_mlp(self, input, hidden_dim, hidden, output, layer_norm=False):
         layers = [nn.Linear(input, hidden_dim), nn.ReLU()]
 
         for i in range(0, hidden):
@@ -74,7 +71,7 @@ class GraphNetwork(nn.Module):
 
         layers.append(nn.Linear(hidden_dim, output))
 
-        if batch_norm:
+        if layer_norm:
             layers.append(nn.LayerNorm(output))
 
         return nn.Sequential(*layers)
@@ -111,11 +108,7 @@ class GraphNetwork(nn.Module):
     def _phi_v(self, graph_batch, processor):
         receivers = graph_batch.receivers.unsqueeze(1).repeat(1, self.ve_dim)
         zeros = torch.zeros_like(graph_batch.nodes)
-        # zeros = torch.zeros(max(graph_batch.edges.size(0), graph_batch.nodes()))
         scattered_edge_states = zeros.scatter_add(0, receivers, graph_batch.edges)
-
-        # scattered_edge_states = F.pad(scattered_edge_states, (0, 0, 0, graph_batch.n_nodes - scattered_edge_states.size(0)))
-        scattered_edge_states = scattered_edge_states[:graph_batch.n_nodes]
 
         # global_tensor = self._repeat_global_tensor(graph_batch.globals, graph_batch.n_nodes, graph_batch.n_nodes)
         graph_batch.nodes = torch.cat([graph_batch.nodes, scattered_edge_states], dim=1)

@@ -1,27 +1,27 @@
 import matplotlib.pyplot as plt
-import mpl_toolkits.mplot3d.axes3d as p3
 import matplotlib.animation as animation
+from time import sleep
 import h5py
 import numpy as np
 import argparse
 
-
 def print_attrs(name, obj):
-    print(name)
     for key in obj.attrs:
         print("{}".format(key))
 
 def get_hdf5(file, path, num):
     f = h5py.File(file, 'r')
-    group = f[path]
-    group = group['positions']
 
-    return np.array(group['{}'.format(num)])
+    dataset = f[path]
+    positions = dataset['positions'].get(num)
+
+    arr = np.zeros(positions.shape, dtype='double')
+    positions.read_direct(arr)
+
+    return positions
 
 def animation_func(num, data, points):
-    print(data[num])
-    print(np.linalg.norm(data[num]))
-    points._offsets3d = (data[num][:, 0], data[num][:, 1], data[num][:, 2])  # , data[num][:, 1])
+    points.set_offsets(data[num])
     return points
 
 
@@ -33,20 +33,21 @@ if __name__ == '__main__':
     parser.add_argument('rollout')
     args = parser.parse_args()
 
-    fig = plt.figure()
-    ax = p3.Axes3D(fig)
+    fig, ax = plt.subplots()
+    plt.axis('scaled')
 
     data = get_hdf5(args.dir, args.path, args.rollout)
 
-    ax.set_xlim3d([0, 0.9])
-    ax.set_xlabel('X')
+    # print(data.shape)
 
-    ax.set_ylim3d([0, 0.9])
-    ax.set_ylabel('Y')
+    ax.axis([0, 1, 0, 1])
 
-    ax.set_zlim3d([0, 0.9])
-    ax.set_zlabel('Z')
+    points = ax.scatter(data[0][:, 0], data[0][:, 1])
+    # anim = animation.FuncAnimation(fig, animation_func, int(data.shape[0]), fargs=(data, points), interval=1)
+    fig.show()
+    fig.canvas.draw()
 
-    points = ax.scatter(data[0][:, 0], data[0][:, 1], data[0][:, 2])  # , data[0][:, 1], s=1000, alpha=0.8)
-    anim = animation.FuncAnimation(fig, animation_func, int(data.shape[0]), fargs=(data, points), interval=1)
-    plt.show()
+    for i in range(data.shape[0]):
+        print('test')
+        points.set_offsets(data[i])
+        fig.canvas.draw()

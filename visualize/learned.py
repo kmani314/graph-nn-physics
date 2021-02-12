@@ -10,8 +10,8 @@ import argparse
 import torch
 from tqdm import tqdm
 
-def animation_func(num, data, points, speed, dim):
-    points.set_offsets(data[num * speed])
+def animation_func(num, data, points):
+    points.set_offsets(data[num])
     return points
 
 
@@ -21,13 +21,12 @@ if __name__ == '__main__':
     parser.add_argument('group')
     parser.add_argument('model')
     parser.add_argument('steps')
-    parser.add_argument('speed')
     parser.add_argument('--gif')
     parser.add_argument('--title')
     args = parser.parse_args()
 
     device = torch.device(params['device'])
-    dataset = SimulationDataset(args.dataset, args.group, params['vel_context'], 0, normalization=params['normalization'])
+    dataset = SimulationDataset(args.dataset, args.group, params['vel_context'], 0, normalization=params['normalization'], only_first=True)
 
     loader = DataLoader(
         dataset,
@@ -49,7 +48,7 @@ if __name__ == '__main__':
         ee_dim=params['embedding_dim'],
     )
 
-    network.load_state_dict(torch.load(args.model))
+    network.load_state_dict(torch.load(args.model)['model_state_dict'])
     network.eval()
     network.to(device=device)
 
@@ -107,9 +106,9 @@ if __name__ == '__main__':
 
     dim = curr_graph.attrs['dim']
 
-    anim = animation.FuncAnimation(fig, animation_func, int(pos.shape[0] / int(args.speed)), fargs=(pos, points, int(args.speed), dim), interval=1)
+    anim = animation.FuncAnimation(fig, animation_func, int(pos.shape[0]), fargs=(pos, points), interval=1)
     if args.gif is not None:
         print('Saving animation...')
         fig.set_size_inches(10, 10, True)
-        anim.save(args.gif, writer='ffmpeg', fps=30, dpi=150)
+        anim.save(args.gif, writer='ffmpeg', fps=60, dpi=150)
     plt.show()

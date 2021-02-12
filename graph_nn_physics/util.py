@@ -14,8 +14,6 @@ def sequence_postprocessor(subseq, stats):
 def graph_preprocessor(position, stats, types):
     vels = sequence_postprocessor(position, stats)
 
-    types = torch.zeros_like(types)
-
     radius = stats['default_connectivity_radius']
 
     bounds = torch.tensor(stats['bounds'])
