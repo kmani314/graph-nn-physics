@@ -1,7 +1,6 @@
 params = dict(
     device='cuda',
-    epochs=1e6,
-    # epochs=10,
+    steps=1e6,
     lr=8.5e-5,
     gamma=0.1,
     mp_steps=10,
@@ -15,4 +14,7 @@ params = dict(
     batch_size=2,
     model_save_interval=5e4,
     decay_interval=5e6,
+    validation_interval=2.5e4,
+    validation_steps=256,
+    validation_samples=4,
 )

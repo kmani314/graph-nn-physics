@@ -39,3 +39,4 @@ class Graph():
         self.vels = self.vels.to(device)
         self.pos = self.pos.to(device)
         self.types = self.types.to(device)
+        self.device = device

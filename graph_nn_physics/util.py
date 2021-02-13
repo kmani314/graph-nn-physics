@@ -16,6 +16,7 @@ def graph_preprocessor(position, stats, types):
 
     radius = stats['default_connectivity_radius']
 
+    types = torch.zeros_like(types)
     bounds = torch.tensor(stats['bounds'])
     lower = bounds[:, 0]
     upper = bounds[:, 1]

@@ -1,9 +1,10 @@
-from torch.utils.tensorboard import SummaryWriter
+from graph_nn_physics.visualize.learned import infer_trajectory, render_rollout_tensor
 from graph_nn_physics.data import SimulationDataset, collate_fn
-from torch.utils.data import DataLoader
+from torch.utils.tensorboard import SummaryWriter
 from graph_nn_physics.hyperparams import params
 from graph_nn_physics.gnn import GraphNetwork
 import torch.autograd.profiler as profiler
+from torch.utils.data import DataLoader
 from torchviz import make_dot
 from os.path import join
 from tqdm import tqdm
@@ -18,6 +19,7 @@ parser.add_argument('save_dir')
 parser.add_argument('--ckpt')
 parser.add_argument('--run_name')
 parser.add_argument('--save_graph')
+parser.add_argument('--validation')
 parser.add_argument('--profile', action='store_true')
 args = parser.parse_args()
 
@@ -49,6 +51,10 @@ loader = DataLoader(
     pin_memory=True,
 )
 
+if args.validation is not None:
+    validation_dataset = SimulationDataset(args.validation, args.group, params['vel_context'], 0, only_first=True)
+    validation_loader = DataLoader(validation_dataset, batch_size=1, collate_fn=collate_fn, shuffle=True)
+
 optimizer = torch.optim.Adam(network.parameters(), lr=params['lr'])
 decay = torch.optim.lr_scheduler.ExponentialLR(optimizer, params['gamma'])
 criterion = torch.nn.MSELoss()
@@ -59,24 +65,21 @@ if logging:
     writer = SummaryWriter(join('runs', args.run_name), flush_secs=1)
 
 min_loss = -1
-epoch = 0
+step = 1
 
 if args.ckpt is not None:
     checkpoint = torch.load(args.ckpt)
     network.load_state_dict(checkpoint['model_state_dict'])
     optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
-    epoch = checkpoint['epoch']
+    step = checkpoint['step']
     network.train()
 
-pbar = tqdm(loader, total=params['epochs'], initial=epoch, dynamic_ncols=True)
+pbar = tqdm(loader, total=params['steps'], initial=step, dynamic_ncols=True)
 
 last_time = time.time()
 
 with profiler.profile(use_cuda=True, with_stack=True, enabled=args.profile) as prof:
     for batch in pbar:
-        if epoch >= params['epochs']:
-            break
-
         optimizer.zero_grad(set_to_none=True)
 
         batch[0].to(device=device)
@@ -97,31 +100,52 @@ with profiler.profile(use_cuda=True, with_stack=True, enabled=args.profile) as p
         loss.backward()
         optimizer.step()
 
-        if (epoch + 1) % params['decay_interval'] == 0:
+        if (step) % params['decay_interval'] == 0:
             decay.step()
 
         if logging:
             dt = time.time() - last_time
             last_time = time.time()
-            writer.add_scalar('stats/predicted', norm, epoch)
-            writer.add_scalar('stats/it/s', 1 / dt, epoch)
-            writer.add_scalar('stats/gt', gt_norm, epoch)
-            writer.add_scalar('loss/mse', loss, epoch)
-            writer.add_scalar('loss/minimum', min_loss, epoch)
-            writer.add_scalar('stats/learning rate', decay.get_last_lr()[0], epoch)
+            writer.add_scalar('stats/it/s', 1 / dt, step)
 
-        if (epoch + 1) % params['model_save_interval'] == 0:
+            writer.add_scalar('stats/predicted', norm, step)
+            writer.add_scalar('stats/gt', gt_norm, step)
+            writer.add_scalar('loss/mse', loss, step)
+            writer.add_scalar('loss/minimum', min_loss, step)
+            writer.add_scalar('stats/learning rate', decay.get_last_lr()[0], step)
+
+            if (step) % params['validation_interval'] == 0:
+                # generate videos
+                videos = []
+                for i in range(params['validation_samples']):
+                    pbar.set_description(f'Rendering rollout {i + 1}/{params["validation_samples"]}', refresh=True)
+                    initial = next(iter(validation_loader))
+                    graph = initial[0]
+                    graph.to(device=device)
+                    pos = infer_trajectory(network, graph, params['validation_steps'])
+                    video = render_rollout_tensor(pos, title=f'step {step}')
+                    videos.append(video)
+
+                videos = torch.cat(videos, dim=0)
+                writer.add_video('rollout', videos, step, fps=60)
+                pbar.set_description(refresh=True)
+
+        if (step) % params['model_save_interval'] == 0:
             torch.save(
                 {
-                    'epoch': epoch,
+                    'step': step,
                     'optimizer_state_dict': optimizer.state_dict(),
                     'model_state_dict': network.cpu().state_dict(),
                     'loss': loss
                 },
-                join(args.save_dir, f'{args.run_name}-{epoch + 1}.pt')
+                join(args.save_dir, f'{args.run_name}-{step}.pt')
             )
             network.to(device=device)
-        epoch += 1
+
+        if step >= params['steps']:
+            break
+
+        step += 1
 
 if args.profile:
     print(prof.key_averages().table(sort_by="cuda_time_total"))

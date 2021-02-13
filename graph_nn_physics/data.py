@@ -41,6 +41,7 @@ def collate_fn(batch):
 class SimulationDataset(Dataset):
     def __init__(self, file, group, vel_seq, noise_std, only_first=False):
         self.dataset = h5py.File(file, 'r', swmr=True, libver='latest')[group]
+        # used for validation dataset
         self.only_first = only_first
         self.noise_std = noise_std
         self.rollouts = len(self.dataset['positions'].keys())
@@ -51,10 +52,7 @@ class SimulationDataset(Dataset):
         return self.len
 
     def __getitem__(self, idx):
-        # idx = np.random.randint(0, high=self.len)
-
         num = str(idx // (self.dataset['positions']['0'].shape[0] - self.vel_seq))
-        # begin = idx % (self.dataset['positions']['0'].shape[0] - self.vel_seq - 2)
         begin = np.random.randint(low=0, high=(self.dataset['positions']['0'].shape[0] - self.vel_seq - 2))
 
         if self.only_first:
