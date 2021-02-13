@@ -9,6 +9,7 @@ from os.path import join
 from tqdm import tqdm
 import argparse
 import torch
+import time
 
 parser = argparse.ArgumentParser()
 parser.add_argument('dataset')
@@ -37,14 +38,13 @@ network = GraphNetwork(
 
 network.to(device=device)
 
-dataset = SimulationDataset(args.dataset, args.group, params['vel_context'], params['noise_std'], normalization=params['normalization'])
+dataset = SimulationDataset(args.dataset, args.group, params['vel_context'], params['noise_std'])
 
 torch.set_printoptions(precision=12, threshold=64000)
 
 loader = DataLoader(
     dataset,
     batch_size=params['batch_size'],
-    shuffle=params['shuffle'],
     collate_fn=collate_fn,
     pin_memory=True,
 )
@@ -56,7 +56,7 @@ criterion = torch.nn.MSELoss()
 logging = args.run_name is not None
 
 if logging:
-    writer = SummaryWriter(join('runs', args.run_name))
+    writer = SummaryWriter(join('runs', args.run_name), flush_secs=1)
 
 min_loss = -1
 epoch = 0
@@ -69,6 +69,8 @@ if args.ckpt is not None:
     network.train()
 
 pbar = tqdm(loader, total=params['epochs'], initial=epoch, dynamic_ncols=True)
+
+last_time = time.time()
 
 with profiler.profile(use_cuda=True, with_stack=True, enabled=args.profile) as prof:
     for batch in pbar:
@@ -99,7 +101,10 @@ with profiler.profile(use_cuda=True, with_stack=True, enabled=args.profile) as p
             decay.step()
 
         if logging:
+            dt = time.time() - last_time
+            last_time = time.time()
             writer.add_scalar('stats/predicted', norm, epoch)
+            writer.add_scalar('stats/it/s', 1 / dt, epoch)
             writer.add_scalar('stats/gt', gt_norm, epoch)
             writer.add_scalar('loss/mse', loss, epoch)
             writer.add_scalar('loss/minimum', min_loss, epoch)

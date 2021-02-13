@@ -39,13 +39,12 @@ def collate_fn(batch):
     return (graph, gt)
 
 class SimulationDataset(Dataset):
-    def __init__(self, file, group, vel_seq, noise_std, normalization=True, only_first=False):
+    def __init__(self, file, group, vel_seq, noise_std, only_first=False):
         self.dataset = h5py.File(file, 'r', swmr=True, libver='latest')[group]
         self.only_first = only_first
         self.noise_std = noise_std
         self.rollouts = len(self.dataset['positions'].keys())
         self.vel_seq = vel_seq
-        self.normalization = normalization
 
     def __len__(self):
         self.len = self.rollouts * (self.dataset['positions'].get('0').shape[0] - self.vel_seq)
@@ -55,7 +54,8 @@ class SimulationDataset(Dataset):
         # idx = np.random.randint(0, high=self.len)
 
         num = str(idx // (self.dataset['positions']['0'].shape[0] - self.vel_seq))
-        begin = idx % (self.dataset['positions']['0'].shape[0] - self.vel_seq - 2)
+        # begin = idx % (self.dataset['positions']['0'].shape[0] - self.vel_seq - 2)
+        begin = np.random.randint(low=0, high=(self.dataset['positions']['0'].shape[0] - self.vel_seq - 2))
 
         if self.only_first:
             begin = 0
